@@ -60,24 +60,36 @@ def process_cas_data(
         with open("/data/cas_schema.json", "w") as f:
             # Use default=str to handle dates/decimals if any in raw data
             json.dump(data, f, indent=2, default=str)
-        print("Raw schema dump written to /data/cas_raw_schema.json")
+        print("Raw schema dump written to /data/cas_schema.json")
     except Exception as e:
         print(f"Failed to write raw schema dump: {e}")
 
     # 2. Extract Investor Info
+    # Validation: Ensure CAS Type is DETAILED
+    cas_type = data.get("cas_type", "UNKNOWN")
+    if cas_type != "DETAILED":
+         return {
+            "status": "error",
+            "message": "Select Summary Type as Detailed (Includes transaction listing) for your Consolidate Account Statement. Current statement type is not supported",
+            "code": "INVALID_CAS_TYPE"
+         }
+
     investor_info = data.get("investor_info", {})
     name = investor_info.get("name")
     full_pan = None
     
-    # Find PAN from first folio
-    folios = data.get("folios", [])
-    if not folios:
-         return {"status": "success", "message": "No folios found in CAS", "data": data}
-         
-    for folio in folios:
-        if folio.get("PAN"):
-            full_pan = folio.get("PAN")
-            break
+    # Find PAN from investor_info or first folio
+    full_pan = investor_info.get("pan")
+    
+    if not full_pan or full_pan == 'N/A':
+        folios = data.get("folios", [])
+        if not folios:
+             return {"status": "success", "message": "No folios found in CAS", "data": data}
+             
+        for folio in folios:
+            if folio.get("PAN"):
+                full_pan = folio.get("PAN")
+                break
     
     if not full_pan:
         raise HTTPException(status_code=400, detail="Could not retrieve PAN from CAS.")
@@ -88,6 +100,7 @@ def process_cas_data(
             active_user_uuid = UUID(x_user_id)
             active_user = session.get(User, active_user_uuid)
             if active_user and active_user.pan != full_pan:
+                print(f"DEBUG: PAN Mismatch! Active: '{active_user.pan}' ({active_user.name}) vs Detected: '{full_pan}' ({name})")
                 return {
                     "status": "warning",
                     "message": "PAN Mismatch Detected",

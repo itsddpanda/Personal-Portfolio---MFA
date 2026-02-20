@@ -45,8 +45,11 @@ export default function UploadPage() {
                 toast.success("CAS uploaded and analyzed successfully!");
                 router.push('/dashboard');
             } else if (result.status === 'warning') {
-                toast.error(`PAN Mismatch: ${result.message}`);
-                setError(`PAN Mismatch! This file belongs to ${result.detected_name} (${result.detected_pan}), but you are logged in as ${result.active_user_name}. Please logout to create a new profile.`);
+                toast.error(`Import Warning: ${result.message}`);
+                setError(`Warning: ${result.message}`);
+            } else if (result.status === 'error') {
+                toast.error(result.message);
+                setError(result.message);
             }
         } catch (err: any) {
             const msg = err.message || "Upload failed";
