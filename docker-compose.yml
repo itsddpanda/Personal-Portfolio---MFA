@@ -20,7 +20,8 @@ services:
     ports:
       - "3000:3000"
     env_file:
-      - ./frontend/.env.local
+      - path: ./frontend/.env.local
+        required: false
     restart: unless-stopped
     depends_on:
       backend:

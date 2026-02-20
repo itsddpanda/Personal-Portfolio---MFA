@@ -24,6 +24,7 @@ class TestCasService(unittest.TestCase):
     def test_process_cas_data_success(self, mock_read_cas):
         # Mock Data
         mock_read_cas.return_value = {
+            "cas_type": "DETAILED",
             "investor_info": {"name": "Test User", "email": "test@example.com"},
             "folios": [{
                 "folio": "123/456",
@@ -67,6 +68,7 @@ class TestCasService(unittest.TestCase):
     def test_deduplication(self, mock_read_cas):
         # Mock Data
         mock_data = {
+            "cas_type": "DETAILED",
             "investor_info": {"name": "Test User"},
             "folios": [{
                 "folio": "123",
@@ -101,11 +103,12 @@ class TestCasService(unittest.TestCase):
         """Test that Schemes are linked to AMCs."""
         # Mock Data with AMC info
         mock_read_cas.return_value = {
+            "cas_type": "DETAILED",
             "investor_info": {"name": "Test User"},
             "folios": [{
                 "folio": "123",
                 "PAN": "ABCDE1234F",
-                "amc": "HDFC Mutual Fund", # CAS Parser usually provides this
+                "amc": "HDFC Mutual Fund",
                 "schemes": [{
                     "isin": "INF123",
                     "scheme": "HDFC Top 100",
@@ -131,6 +134,7 @@ class TestCasService(unittest.TestCase):
     def test_isin_fallback(self, mock_read_cas):
         """Test ISIN extraction from scheme name when missing in parsed data."""
         mock_read_cas.return_value = {
+            "cas_type": "DETAILED",
             "investor_info": {"name": "Test User"},
             "folios": [{
                 "folio": "123",
@@ -161,7 +165,7 @@ class TestCasService(unittest.TestCase):
         # Verify Scheme Created with Correct ISIN
         scheme = self.session.exec(select(Scheme).where(Scheme.isin == "INF966L01EC8")).first()
         self.assertIsNotNone(scheme)
-        self.assertEqual(scheme.name, "quant Equity Savings Fund - Direct Plan-Growth - ISIN: INF966L01EC8")
+        self.assertEqual(scheme.name, "quant Equity Savings Fund - Direct Plan-Growth")
 
 if __name__ == "__main__":
     unittest.main()

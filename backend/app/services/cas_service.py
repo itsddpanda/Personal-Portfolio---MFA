@@ -55,14 +55,7 @@ def process_cas_data(
     if not data:
         raise HTTPException(status_code=400, detail="Failed to extract data from CAS PDF.")
 
-    # DEBUG: Dump Raw Schema
-    try:
-        with open("/data/cas_schema.json", "w") as f:
-            # Use default=str to handle dates/decimals if any in raw data
-            json.dump(data, f, indent=2, default=str)
-        print("Raw schema dump written to /data/cas_schema.json")
-    except Exception as e:
-        print(f"Failed to write raw schema dump: {e}")
+    # (Debug schema dump removed — was writing to /data/ which only exists in Docker)
 
     # 2. Extract Investor Info
     # Validation: Ensure CAS Type is DETAILED
@@ -421,13 +414,7 @@ def process_cas_data(
         
         debug_data["folios"].append(folio_debug) # DEBUG
     
-    # Write Debug Dump
-    try:
-        with open("/data/cas_import_schema.json", "w") as f:
-            json.dump(debug_data, f, indent=2, default=str)
-        print("Debug schema dump written to /data/cas_import_schema.json")
-    except Exception as e:
-        print(f"Failed to write debug dump: {e}")
+    # (Debug import dump removed — was writing to /data/ which only exists in Docker)
 
     session.commit()
 
