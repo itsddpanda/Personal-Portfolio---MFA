@@ -16,9 +16,19 @@ from app.models.models import User, Portfolio, Folio, Scheme, Transaction, AMC
 
 # Load ISIN Map
 ISIN_MAP = {}
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ISIN_MAP_PATH = os.path.join(BASE_DIR, "data", "isin_amfi_map.json")
+
+# Fallback for Docker container path if BASE_DIR logic doesn't align with mount
+if not os.path.exists(ISIN_MAP_PATH) and os.path.exists("/data/isin_amfi_map.json"):
+    ISIN_MAP_PATH = "/data/isin_amfi_map.json"
+
 try:
-    with open("/data/isin_amfi_map.json", "r") as f:
-        ISIN_MAP = json.load(f)
+    if os.path.exists(ISIN_MAP_PATH):
+        with open(ISIN_MAP_PATH, "r") as f:
+            ISIN_MAP = json.load(f)
+    else:
+        print(f"Warning: ISIN map not found at {ISIN_MAP_PATH}")
 except Exception as e:
     print(f"Warning: Failed to load ISIN map: {e}")
 
