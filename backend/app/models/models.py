@@ -19,6 +19,11 @@ class Scheme(SQLModel, table=True):
     advisor: Optional[str] = None # DIRECT, REGULAR
     amc_id: Optional[int] = Field(default=None, foreign_key="amc.id")
     
+    # Extended Metadata (From MFAPI)
+    fund_house: Optional[str] = None
+    scheme_category: Optional[str] = None
+    scheme_type: Optional[str] = None
+    
     # Caching latest NAV & Valuation
     latest_nav: Optional[float] = None
     latest_nav_date: Optional[dt_date] = None

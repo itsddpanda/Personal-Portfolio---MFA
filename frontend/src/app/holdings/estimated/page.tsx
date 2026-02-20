@@ -28,13 +28,14 @@ export default function EstimatedHoldingsPage() {
     useEffect(() => {
         const userId = localStorage.getItem('mfa_user_id');
         if (!userId) {
-            router.push('/upload');
+            router.push('/');
             return;
         }
 
         const fetchData = async () => {
             try {
                 const result = await getDashboardSummary(userId);
+                if (!result || !result.holdings) return;
                 const estimated = result.holdings.filter((h: any) => h.is_estimated);
                 setHoldings(estimated);
             } catch (error) {

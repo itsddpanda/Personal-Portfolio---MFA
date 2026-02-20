@@ -1,7 +1,7 @@
 import requests
-from sqlmodel import Session, select
+from sqlmodel import Session, select, or_
 from app.models.models import Scheme, NavHistory
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import logging
 import time
 
@@ -46,8 +46,15 @@ def sync_navs(session: Session):
     Iterates through all schemes with AMFI codes that are missing NAVs (latest_nav IS NULL)
     and updates their NAVs using the fallback mfapi.in API.
     """
+    three_days_ago = date.today() - timedelta(days=3)
     schemes = session.exec(
-        select(Scheme).where(Scheme.amfi_code != None, Scheme.latest_nav == None)
+        select(Scheme).where(
+            Scheme.amfi_code != None, 
+            or_(
+                Scheme.latest_nav == None,
+                Scheme.latest_nav_date < three_days_ago
+            )
+        )
     ).all()
     updated_count = 0
     errors = 0

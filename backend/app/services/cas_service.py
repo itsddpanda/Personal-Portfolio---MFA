@@ -398,8 +398,7 @@ def process_cas_data(
                 )
                 session.add(new_txn)
                 new_txns_count += 1
-                
-            scheme_debug["transactions"].append(txn_debug_entry) # DEBUG
+                scheme_debug["transactions"].append(txn_debug_entry) # DEBUG
             
             # --- RECONCILIATION logic ---
             # If we imported real transactions, check if they "precede" an existing OPENING_BALANCE

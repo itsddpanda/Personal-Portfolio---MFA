@@ -1,5 +1,5 @@
 from sqlmodel import Session, select, func, case
-from app.models.models import Transaction, Scheme, Portfolio, Folio
+from app.models.models import Transaction, Scheme, Portfolio, Folio, SystemState
 from pyxirr import xirr
 from datetime import date
 from typing import List, Dict, Any
@@ -88,9 +88,14 @@ def get_portfolio_summary(session: Session, user_id: str):
     estimated_schemes = set()  # Track schemes with zero-cost OPENING_BALANCE
     opening_balance_details = {}  # scheme_id -> {units, date}
     
-    # XIRR Cash Flows
+    # Global XIRR Cash Flows
     dates = []
     amounts = []
+    
+    # Scheme XIRR Cash Flows & Dates
+    scheme_xirr_data = defaultdict(lambda: {"dates": [], "amounts": []})
+    scheme_first_investment_date = {}
+    
     total_stamp_duty = 0.0
     
     inflow_types = ["PURCHASE", "PURCHASE_SIP", "SIP", "SWITCH_IN", "STP_IN", "OPENING_BALANCE"]
@@ -146,12 +151,17 @@ def get_portfolio_summary(session: Session, user_id: str):
         
         if any(x in t_type for x in inflow_types):
             cash_flow = -abs(t.amount)
+            # Track first investment date for scheme
+            if t.scheme_id not in scheme_first_investment_date and t.date:
+                scheme_first_investment_date[t.scheme_id] = t.date
         elif any(x in t_type for x in (outflow_types + ["DIVIDEND"])):
             cash_flow = abs(t.amount)
             
         if cash_flow != 0:
             dates.append(t.date)
             amounts.append(cash_flow)
+            scheme_xirr_data[t.scheme_id]["dates"].append(t.date)
+            scheme_xirr_data[t.scheme_id]["amounts"].append(cash_flow)
 
     # 3. Calculate Final Invested Value from FIFO Queues
     total_invested_value = 0.0
@@ -193,14 +203,47 @@ def get_portfolio_summary(session: Session, user_id: str):
         
         fifo_invested = scheme_invested_map.get(scheme.id, 0.0)
         
+        # --- Per-Scheme XIRR Calculation & Edge Cases ---
+        s_xirr = None
+        s_xirr_status = "VALID"
+        
+        if scheme.id in estimated_schemes:
+            s_xirr_status = "ESTIMATED"
+        else:
+            first_date = scheme_first_investment_date.get(scheme.id)
+            if first_date and latest_nav_date:
+                duration = (latest_nav_date - first_date).days
+                if duration < 365:
+                    s_xirr_status = "LESS_THAN_1_YEAR"
+                else:
+                    s_dates = scheme_xirr_data[scheme.id]["dates"].copy()
+                    s_amounts = scheme_xirr_data[scheme.id]["amounts"].copy()
+                    
+                    if current_val > 0:
+                        s_dates.append(date.today())
+                        s_amounts.append(current_val)
+                    
+                    try:
+                        if s_dates:
+                            calc_xirr = xirr(s_dates, s_amounts)
+                            if calc_xirr is not None:
+                                s_xirr = calc_xirr * 100
+                    except Exception:
+                        s_xirr_status = "ERROR"
+            else:
+                s_xirr_status = "MISSING_DATES"
+        
         holding_entry = {
             "scheme_name": scheme.name,
             "isin": scheme.isin,
+            "amfi_code": scheme.amfi_code,
             "units": float(net_units),
             "current_nav": nav,
             "current_value": current_val,
             "invested_value": float(fifo_invested),
-            "is_estimated": scheme.id in estimated_schemes
+            "is_estimated": scheme.id in estimated_schemes,
+            "xirr": s_xirr,
+            "xirr_status": s_xirr_status
         }
         
         if scheme.id in estimated_schemes:
@@ -212,7 +255,7 @@ def get_portfolio_summary(session: Session, user_id: str):
         
         final_holdings.append(holding_entry)
 
-    # Add terminal value for XIRR
+    # Add terminal value for Portfolio XIRR
     if total_current_value > 0:
         dates.append(date.today())
         amounts.append(total_current_value)
@@ -229,6 +272,10 @@ def get_portfolio_summary(session: Session, user_id: str):
         print(f"XIRR Error: {e}")
         xirr_val = 0.0
         
+    # Fetch System State for Sync
+    sys_status = session.get(SystemState, "nav_sync_status")
+    sys_last_run = session.get(SystemState, "nav_sync_last_run")
+
     return {
         "total_value": total_current_value,
         "invested_value": total_invested_value,
@@ -237,5 +284,7 @@ def get_portfolio_summary(session: Session, user_id: str):
         "holdings": final_holdings,
         "has_estimated_holdings": len(estimated_schemes) > 0,
         "estimated_schemes_count": len(estimated_schemes),
-        "total_stamp_duty": round(total_stamp_duty, 2)
+        "total_stamp_duty": round(total_stamp_duty, 2),
+        "nav_sync_status": sys_status.value if sys_status else "IDLE",
+        "nav_sync_last_run": sys_last_run.value if sys_last_run else None
     }

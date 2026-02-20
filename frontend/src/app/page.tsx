@@ -13,7 +13,7 @@ export default function Home() {
     const userId = localStorage.getItem("mfa_user_id");
 
     // Always fetch users to see if we have profiles created
-    fetch(`http://localhost:8000/api/users`)
+    fetch(`/api/users`)
       .then(res => res.json())
       .then((users: any[]) => {
         if (users && users.length > 0) {

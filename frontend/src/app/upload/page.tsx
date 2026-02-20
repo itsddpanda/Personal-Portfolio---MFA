@@ -66,7 +66,7 @@ export default function UploadPage() {
                     attempts++;
                 }
 
-                toast.success("CAS uploaded and analyzed successfully!");
+                toast.success(`Success: Imported ${result.new_transactions || 0} new transactions, skipped ${result.skipped_transactions || 0} duplicates.`);
                 if (result.reconciled_opening_balances && result.reconciled_opening_balances > 0) {
                     toast.success(`Full history imported! Invested value updated for ${result.reconciled_opening_balances} scheme${result.reconciled_opening_balances > 1 ? 's' : ''}.`);
                 }
@@ -76,6 +76,7 @@ export default function UploadPage() {
                 const proceed = window.confirm(`CAS belongs to new user (${result.detected_name}). Create & switch?`);
                 if (proceed) {
                     await processUpload(true);
+                    return;
                 } else {
                     toast.error("Upload cancelled.");
                     setError("Upload cancelled due to PAN mismatch.");

@@ -16,4 +16,6 @@ RUN chmod 0644 /etc/cron.d/sync_amfi_cron
 RUN crontab /etc/cron.d/sync_amfi_cron
 RUN touch /var/log/cron.log
 
+RUN chmod +x /app/start.sh
+
 CMD ["/app/start.sh"]

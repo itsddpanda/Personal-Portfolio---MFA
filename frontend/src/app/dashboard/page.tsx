@@ -1,14 +1,15 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { getDashboardSummary, getSyncStatus } from '@/lib/api';
+import { getDashboardSummary, getSyncStatus, syncNavs } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 
 interface Holding {
     scheme_name: string;
     isin: string;
+    amfi_code?: string;
     units: number;
     current_nav: number;
     current_value: number;
@@ -25,9 +26,12 @@ interface SummaryData {
     has_estimated_holdings: boolean;
     estimated_schemes_count: number;
     total_stamp_duty: number;
+    nav_sync_status: string;
+    nav_sync_last_run: string | null;
 }
 
 import { useToast } from '@/components/ui/Toast';
+import Link from 'next/link';
 
 export default function DashboardPage() {
     const [data, setData] = useState<SummaryData | null>(null);
@@ -37,6 +41,11 @@ export default function DashboardPage() {
     const router = useRouter();
     const toast = useToast();
 
+    const syncingRef = useRef(syncing);
+    useEffect(() => {
+        syncingRef.current = syncing;
+    }, [syncing]);
+
     useEffect(() => {
         const userId = localStorage.getItem('mfa_user_id');
         if (!userId) {
@@ -45,24 +54,35 @@ export default function DashboardPage() {
         }
         fetchData(userId);
 
-        // Start polling sync status
-        const interval = setInterval(async () => {
+        // Dynamic polling interval
+        let pollTimeout: NodeJS.Timeout;
+
+        const poll = async () => {
             try {
                 const status = await getSyncStatus();
 
                 // If it just finished syncing, refresh data
-                if (syncing && !status.is_syncing && userId) {
+                if (syncingRef.current && !status.is_syncing && userId) {
                     await fetchData(userId);
                 }
 
                 setSyncing(status.is_syncing);
-            } catch (e) {
-                // Ignore polling errors silently
-            }
-        }, 5000); // UI poll every 5s
 
-        return () => clearInterval(interval);
-    }, [syncing, router]);
+                // Smart polling: every 5s if active, 60s if idle
+                const nextInterval = status.is_syncing ? 5000 : 60000;
+                pollTimeout = setTimeout(poll, nextInterval);
+
+            } catch (e) {
+                // Ignore polling errors silently, retry in 60s
+                pollTimeout = setTimeout(poll, 60000);
+            }
+        };
+
+        // Start initial poll
+        poll();
+
+        return () => clearTimeout(pollTimeout);
+    }, [router]);
 
     const fetchData = async (userId: string) => {
         try {
@@ -76,21 +96,13 @@ export default function DashboardPage() {
         }
     };
 
-    const handleLogout = () => {
-        localStorage.removeItem('mfa_user_id');
-        router.push('/upload');
-    };
-
     const handleForceSync = async () => {
         const userId = localStorage.getItem('mfa_user_id');
         if (!userId) return;
 
         try {
             setSyncing(true);
-            await fetch('http://localhost:8000/api/sync-nav', {
-                method: 'POST',
-                headers: { 'x-user-id': userId },
-            });
+            await syncNavs(userId);
             toast.success("NAV Sync completed successfully.");
             await fetchData(userId);
         } catch (e) {
@@ -125,6 +137,10 @@ export default function DashboardPage() {
     const gain = total_value - invested_value;
     const gainPercent = invested_value > 0 ? (gain / invested_value) * 100 : 0;
 
+    const isStale = latest_nav_date && (new Date().getTime() - new Date(latest_nav_date).getTime() > 3 * 24 * 60 * 60 * 1000);
+    const navSyncFailed = data.nav_sync_status === "FAILED";
+    const isCriticalStale = isStale && navSyncFailed;
+
     return (
         <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-7xl mx-auto space-y-6">
@@ -142,21 +158,32 @@ export default function DashboardPage() {
                                 Syncing NAVs...
                             </div>
                         ) : (
-                            <div className="text-gray-500 text-sm font-medium">
+                            <div className={`text-sm font-medium ${isStale ? 'text-amber-600' : 'text-gray-500'}`}>
+                                {navSyncFailed && <span className="text-red-500 mr-2" title="Background sync failed">⚠️</span>}
                                 {latest_nav_date ? `Latest NAV Date: ${new Date(latest_nav_date).toLocaleDateString()}` : "Latest NAV Date: Pending"}
                             </div>
                         )}
                         <Button variant="outline" onClick={handleForceSync} disabled={syncing}>
-                            Force Sync
+                            {syncing ? 'Syncing...' : 'Force Sync'}
                         </Button>
                         <Button variant="secondary" onClick={() => router.push('/upload')}>
                             Upload CAS
                         </Button>
-                        <Button variant="danger" onClick={handleLogout}>
-                            Logout
-                        </Button>
                     </div>
                 </div>
+
+                {/* Critical Failure Banner */}
+                {isCriticalStale && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                        <span className="text-red-500 text-xl flex-shrink-0">⚠️</span>
+                        <div className="flex-1">
+                            <h3 className="text-red-800 font-semibold mb-1">Critical Failure: Market Data Outdated</h3>
+                            <p className="text-red-700 text-sm">
+                                Your portfolio NAVs are older than 3 days and background sync has failed. Valuations may be incorrect.
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {/* Estimated Holdings Warning Banner */}
                 {data.has_estimated_holdings && showEstimatedBanner && (
@@ -179,22 +206,22 @@ export default function DashboardPage() {
 
                 {/* KPI Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card title="Current Value">
+                    <Card title="Current Value" href="/drilldown/current-value">
                         <p className="text-3xl font-bold text-blue-600">₹{total_value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
                     </Card>
-                    <Card title="Invested Value">
+                    <Card title="Invested Value" href="/drilldown/invested-value">
                         <p className="text-3xl font-bold text-gray-700">₹{invested_value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
                         {total_stamp_duty > 0 && (
                             <p className="text-xs text-gray-400 mt-1">Stamp duty: ₹{total_stamp_duty.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
                         )}
                     </Card>
-                    <Card title="Total Gain">
+                    <Card title="Total Gain" href="/drilldown/total-gain">
                         <p className={`text-3xl font-bold ${gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             ₹{gain.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                             <span className="text-sm ml-2 font-normal">({gainPercent.toFixed(2)}%)</span>
                         </p>
                     </Card>
-                    <Card title="XIRR">
+                    <Card title="XIRR" href="/drilldown/xirr">
                         <p className={`text-3xl font-bold ${xirr >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
                             {xirr.toFixed(2)}%
                         </p>
@@ -217,7 +244,11 @@ export default function DashboardPage() {
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {holdings.map((h) => (
                                     <tr key={h.isin}>
-                                        <td className="px-4 py-4 text-sm font-medium text-gray-900">{h.scheme_name}</td>
+                                        <td className="px-4 py-4 text-sm font-medium">
+                                            <Link href={h.amfi_code ? `/scheme/${h.amfi_code}` : '#'} className="text-gray-900 hover:text-blue-600 hover:underline block truncate" title={h.scheme_name}>
+                                                {h.scheme_name}
+                                            </Link>
+                                        </td>
                                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{h.units.toFixed(3)}</td>
                                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-right">₹{h.current_nav.toFixed(2)}</td>
                                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-semibold">₹{h.current_value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>

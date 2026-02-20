@@ -18,6 +18,7 @@ node_modules/
 npm-debug.log
 yarn-error.log
 .next/
+.next_*/
 out/
 
 # Docker
@@ -28,7 +29,6 @@ data/*
 !data/.gitkeep
 *.zip
 *.log
-./.*/
 tmp/
 .local-node/
 
@@ -36,6 +36,18 @@ tmp/
 .vscode/
 
 # Custom Exclusions
-*.md
-*.py
+*.db
+*.sqlite
+*.sqlite3
+mfa.db
+.agent/
+debug_db.py
+rca_compare.py
+get_cas_schema.py
+scripts/
+backend/scripts/
+
+# Docs & local notes (not for version control)
 docs/
+review_comments.json
+useful commands.json

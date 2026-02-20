@@ -65,3 +65,18 @@ export async function getSyncStatus() {
     }
     return res.json();
 }
+
+export async function getSchemeDetails(amfiCode: string, xUserId: string) {
+    const res = await fetch(`${API_BASE}/scheme/${amfiCode}`, {
+        headers: {
+            'x-user-id': xUserId,
+        },
+    });
+
+    if (!res.ok) {
+        if (res.status === 404) return null;
+        throw new Error('Failed to fetch scheme details');
+    }
+
+    return res.json();
+}
