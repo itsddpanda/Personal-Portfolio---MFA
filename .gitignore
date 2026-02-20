@@ -37,7 +37,7 @@ tmp/
 .vscode/
 .idea/
 
-# custom ignore
-./*.md
-./*.py
-./docs/
+# Custom Exclusions
+*.md
+*.py
+docs/
