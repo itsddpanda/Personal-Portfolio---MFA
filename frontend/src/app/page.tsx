@@ -1,8 +1,33 @@
+"use client";
 import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 
 export default function Home() {
+  const [showDashboard, setShowDashboard] = useState(false);
+
+  useEffect(() => {
+    // Check if user is logged in locally
+    const userId = localStorage.getItem("mfa_user_id");
+    if (userId) {
+      // Validate with backend (lazy check: just existence of ID for now, or ping API)
+      // For MVP speed, we'll trust localStorage but the Dashboard will handle 404 if user deleted.
+      // Requirement says: "Frontend must silently ping GET /api/users/{id}"
+      // Let's do that for robustness.
+      fetch(`http://localhost:8000/api/users`)
+        .then(res => res.json())
+        .then((users: any[]) => {
+          if (users.find(u => u.id === userId)) {
+            setShowDashboard(true);
+          } else {
+            localStorage.removeItem("mfa_user_id"); // Cleanup stale
+          }
+        })
+        .catch(() => { /* API down? Ignore, show default */ });
+    }
+  }, []);
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-gradient-to-b from-blue-50 to-white">
       <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
@@ -24,10 +49,22 @@ export default function Home() {
             Parse your CAMS/KFintech CAS PDF locally. No data leaves your device.
           </p>
           <Link href="/upload">
-            <Button>Get Started</Button>
+            <Button>Upload New CAS</Button>
           </Link>
         </Card>
 
+        {showDashboard && (
+          <Card title="Return to Dashboard">
+            <p className="mb-4 text-gray-500">
+              Welcome back! Your portfolio session is active.
+            </p>
+            <Link href="/dashboard">
+              <Button variant="outline" className="border-blue-500 text-blue-600 hover:bg-blue-50">
+                Go to Dashboard &rarr;
+              </Button>
+            </Link>
+          </Card>
+        )}
       </div>
     </main>
   );

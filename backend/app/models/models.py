@@ -1,5 +1,5 @@
 from typing import Optional, List
-from datetime import date as dt_date
+from datetime import date as dt_date, datetime
 from sqlmodel import Field, SQLModel, Relationship
 from uuid import UUID, uuid4
 import hashlib
@@ -40,10 +40,11 @@ class NavHistory(SQLModel, table=True):
 
 # Private Data
 class User(SQLModel, table=True):
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    pan: str = Field(unique=True, index=True)
+    id: Optional[UUID] = Field(default_factory=uuid4, primary_key=True)
     name: str
-    created_at: dt_date = Field(default_factory=dt_date.today)
+    pan: str = Field(index=True, unique=True)
+    pin_hash: Optional[str] = Field(default=None, nullable=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
     
     portfolios: List["Portfolio"] = Relationship(back_populates="user")
 
