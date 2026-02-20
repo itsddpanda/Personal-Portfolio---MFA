@@ -4,7 +4,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - mfa_data:/data
+      - ./backend/data:/data
     env_file:
       - ./backend/.env
     restart: unless-stopped

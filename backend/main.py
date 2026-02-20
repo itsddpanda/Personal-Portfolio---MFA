@@ -10,7 +10,6 @@ from app.db.engine import create_db_and_tables
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    create_db_and_tables()
     yield
 
 app = FastAPI(title="Mutual Fund Analyzer API", lifespan=lifespan)
