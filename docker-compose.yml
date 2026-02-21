@@ -26,6 +26,3 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-
-volumes:
-  mfa_data:
