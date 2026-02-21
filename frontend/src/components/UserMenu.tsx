@@ -22,7 +22,7 @@ export default function UserMenu() {
     const [pin, setPin] = useState("");
     const [error, setError] = useState("");
 
-    const API_BASE = "http://localhost:8000/api";
+    const API_BASE = "http://localhost:8001/api";
 
     const handleSetPin = async () => {
         if (!pinModalUser || !pin || pin.length !== 4) {

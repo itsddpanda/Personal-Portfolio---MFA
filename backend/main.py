@@ -16,7 +16,7 @@ app = FastAPI(title="Mutual Fund Analyzer API", lifespan=lifespan)
 
 import os
 
-origins_str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+origins_str = os.getenv("CORS_ORIGINS", "http://localhost:3001,http://127.0.0.1:3001")
 origins = [origin.strip() for origin in origins_str.split(",")]
 
 app.add_middleware(

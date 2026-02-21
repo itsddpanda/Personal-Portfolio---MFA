@@ -48,8 +48,6 @@ mfa.db
 debug_db.py
 rca_compare.py
 get_cas_schema.py
-scripts/
-backend/scripts/
 
 # Docs & local notes (not for version control)
 docs/
