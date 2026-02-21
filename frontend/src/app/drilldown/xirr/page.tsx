@@ -89,14 +89,18 @@ export default function XirrDrilldownPage() {
                                 {isPositiveXirr ? '+' : ''}{portfolioXirr.toFixed(2)}%
                             </p>
                         </div>
-                        <div className="mt-4 md:mt-0 md:max-w-md text-right">
-                            <p className={`text-sm ${isPositiveXirr ? 'text-purple-800' : 'text-red-800'} font-medium`}>How is this calculated?</p>
-                            <p className={`text-xs mt-1 ${isPositiveXirr ? 'text-purple-700' : 'text-red-700'}`}>
-                                XIRR applies a strict time-weighted formula to every exact transaction date (SIPs, lumpsums, redemptions) across your entire account history. Because the system calculates this globally on all cashflows, an exact per-scheme XIRR is not dynamically computed at this time.
-                            </p>
-                        </div>
                     </div>
                 </Card>
+
+                <div className="bg-blue-50 text-blue-800 p-4 rounded-md mb-6 text-sm flex gap-3">
+                    <span className="text-xl">ℹ️</span>
+                    <div>
+                        <p className="font-semibold mb-1">How XIRR Works</p>
+                        <p>
+                            XIRR applies a strict time-weighted formula to every exact transaction date (SIPs, lumpsums, redemptions) to calculate your annualized return. Per-scheme XIRR is fully supported for investments held longer than 1 year with a clear entry and exit history.
+                        </p>
+                    </div>
+                </div>
 
                 {/* Detailed Table */}
                 <Card title="Per-Scheme XIRR Breakdown" className="overflow-hidden">

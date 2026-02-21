@@ -104,11 +104,12 @@ export default function DashboardPage() {
         try {
             setSyncing(true);
             await syncNavs(userId);
-            toast.success("NAV Sync completed successfully.");
-            await fetchData(userId);
+            toast.success("NAV Sync initiated. Refreshing automatically...");
+            // Notice: fetchData() is explicitly NOT called here.
+            // The polling loop (useEffect) immediately detects the sync is running (is_syncing=true)
+            // and will automatically fetch the new data when it flips back to false.
         } catch (e) {
-            toast.error("Failed to sync NAVs.");
-        } finally {
+            toast.error("Failed to initiate NAV sync.");
             setSyncing(false);
         }
     };

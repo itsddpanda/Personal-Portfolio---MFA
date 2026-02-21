@@ -45,18 +45,51 @@ def update_status(session: Session, status: str):
 def run_sync():
     logger.info("Starting AMFI bulk sync...")
     with Session(engine) as session:
-        # 1. Mark status as IN_PROGRESS
-        update_status(session, "IN_PROGRESS")
-        
         try:
-            # 2. Fetch the latest AMFI NAV data
-            logger.info(f"Fetching NAV data from {AMFI_URL}")
-            response = requests.get(AMFI_URL, timeout=30)
-            response.raise_for_status()
-            lines = response.text.splitlines()
-            logger.info(f"Received {len(lines)} lines of data")
+            # 1. Fetch or Load the latest AMFI NAV data
+            amfi_file_path = "/data/NAVAll.txt" if os.path.exists("/data") else os.path.join(os.path.dirname(__file__), "..", "data", "NAVAll.txt")
             
-            # 3. Build a lookup map of AMFI code -> (NAV, Date)
+            # Check for recent successful execution
+            use_cache = False
+            last_run_state = session.get(SystemState, "nav_sync_last_run")
+            status_state = session.get(SystemState, "nav_sync_status")
+            
+            if last_run_state and status_state and status_state.value == "IDLE":
+                try:
+                    last_run_time = datetime.datetime.fromisoformat(last_run_state.value)
+                    time_since_last_run = datetime.datetime.utcnow() - last_run_time
+                    if time_since_last_run < datetime.timedelta(hours=4) and os.path.exists(amfi_file_path):
+                        logger.info(f"Skipping HTTP fetch. Last successful sync was only {time_since_last_run.total_seconds() / 3600:.1f} hours ago. Using cached payload.")
+                        use_cache = True
+                except Exception as e:
+                    logger.warning(f"Failed to parse last run time: {e}")
+            
+            # Mark status as IN_PROGRESS
+            update_status(session, "IN_PROGRESS")
+            
+            if not use_cache:
+                logger.info(f"Fetching NAV data from {AMFI_URL}")
+                response = requests.get(AMFI_URL, timeout=30)
+                response.raise_for_status()
+                payload_text = response.text
+                
+                # Cache to disk for offline overrides
+                try:
+                    os.makedirs(os.path.dirname(amfi_file_path), exist_ok=True)
+                    with open(amfi_file_path, "w") as f:
+                        f.write(payload_text)
+                    logger.info(f"Successfully cached payload to {amfi_file_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to cache NAV payload to disk: {e}")
+            else:
+                logger.info(f"Loading NAV data from disk cache at {amfi_file_path}")
+                with open(amfi_file_path, "r") as f:
+                    payload_text = f.read()
+
+            lines = payload_text.splitlines()
+            logger.info(f"Started processing {len(lines)} lines of data")
+            
+            # 2. Build a lookup map of AMFI code -> (NAV, Date)
             amfi_data = {}
             for line in lines:
                 line = line.strip()

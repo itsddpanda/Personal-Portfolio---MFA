@@ -9,15 +9,61 @@ logger = logging.getLogger(__name__)
 
 MFAPI_BASE_URL = "https://api.mfapi.in/mf"
 
+def scrape_amfi_portal_fallback(amfi_code: str):
+    """
+    Scrapes the AMFI portal for a specific scheme's recent NAV history when the main API fails.
+    Since we don't know the exact last date, we request the last 5 days.
+    """
+    try:
+        # Request data from 5 days ago to today
+        start_date = (date.today() - timedelta(days=5)).strftime("%d-%b-%Y")
+        url = f"https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx?frmdt={start_date}"
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        
+        response = requests.get(url, headers=headers, timeout=15)
+        if response.status_code == 200:
+            lines = response.text.splitlines()
+            # We need to find our specific amfi_code in this bulk dump
+            
+            latest_nav = None
+            latest_date = None
+            
+            for line in lines:
+                parts = line.split(";")
+                if len(parts) >= 8 and parts[0].strip() == amfi_code:
+                    nav_str = parts[4].strip()
+                    date_str = parts[7].strip()
+                    
+                    try:
+                        nav_val = float(nav_str)
+                        date_obj = datetime.strptime(date_str, "%d-%b-%Y").date()
+                        
+                        # Keep the most recent one (the file is usually chronological, but we ensure max date)
+                        if not latest_date or date_obj > latest_date:
+                            latest_nav = nav_val
+                            latest_date = date_obj
+                    except ValueError:
+                        pass
+                        
+            if latest_nav and latest_date:
+                logger.info(f"Fallback scraper succeeded for {amfi_code}")
+                return latest_nav, latest_date
+                
+    except Exception as e:
+        logger.warning(f"Fallback scraper also failed for {amfi_code}: {e}")
+        
+    return None, None
+
 def fetch_latest_nav(amfi_code: str):
     """
-    Fetches the latest NAV from mfapi.in for a given AMFI code.
+    Fetches the latest NAV from mfapi.in. If that fails (e.g., 502), falls back to scraping AMFI.
     Returns: (nav: float, date: date) or (None, None)
     """
     try:
         url = f"{MFAPI_BASE_URL}/{amfi_code}"
-        # MFAPI might rate limit if we hit too fast, but it claims to be open.
-        # Adding a small sleep if needed, but for now strict 1 request.
         response = requests.get(url, timeout=10)
         
         if response.status_code == 200:
@@ -26,20 +72,19 @@ def fetch_latest_nav(amfi_code: str):
                 nav_list = data.get("data", [])
                 if nav_list:
                     latest = nav_list[0]
-                    # Format: "date": "dd-mm-yyyy", "nav": "123.45"
                     date_str = latest.get("date")
                     nav_val = float(latest.get("nav"))
                     
-                    # Parse Date
                     date_obj = datetime.strptime(date_str, "%d-%m-%Y").date()
                     return nav_val, date_obj
         else:
-            logger.error(f"Failed to fetch NAV for {amfi_code}: Status {response.status_code}")
+            logger.warning(f"Failed to fetch NAV from mfapi.in for {amfi_code}: Status {response.status_code}. Using fallback.")
             
     except Exception as e:
-        logger.error(f"Error fetching NAV for {amfi_code}: {e}")
+        logger.warning(f"Error fetching NAV from mfapi.in for {amfi_code}: {e}. Using fallback.")
         
-    return None, None
+    # Trigger fallback if we reach here
+    return scrape_amfi_portal_fallback(amfi_code)
 
 def sync_navs(session: Session):
     """

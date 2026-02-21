@@ -68,7 +68,28 @@ def process_cas_data(
     if not data:
         raise HTTPException(status_code=400, detail="Failed to extract data from CAS PDF.")
 
-    # (Debug schema dump removed — was writing to /data/ which only exists in Docker)
+    # 1.5 Debug Schema Dump
+    try:
+        # Determine the best path depending on Docker vs standalone vs tests
+        schema_dump_dir = "/data" if os.path.exists("/data") else os.path.join(BASE_DIR, "data")
+        os.makedirs(schema_dump_dir, exist_ok=True)
+        
+        # Serialize datetime and decimal objects safely
+        from datetime import date as _date, datetime as _datetime
+        from decimal import Decimal as _Decimal
+        def _json_serial(obj):
+            if isinstance(obj, (_datetime, _date)):
+                return obj.isoformat()
+            if isinstance(obj, _Decimal):
+                return float(obj)
+            raise TypeError(f"Type {type(obj)} not serializable")
+            
+        schema_path = os.path.join(schema_dump_dir, "cas_schema.json")
+        with open(schema_path, "w") as f:
+            json.dump(data, f, indent=2, default=_json_serial)
+    except Exception as e:
+        print(f"Warning: Failed to write CAS debug schema dump: {e}")
+        pass # Do not fail the entire upload process
 
     # 2. Extract Investor Info
     # Validation: Ensure CAS Type is DETAILED
@@ -317,28 +338,46 @@ def process_cas_data(
                 )
 
                 if not session.get(Transaction, op_txn_id):
-                     op_txn = Transaction(
-                        id=op_txn_id,
-                        folio_id=folio_obj.id,
-                        scheme_id=scheme_obj.id,
-                        date=start_date,
-                        type="OPENING_BALANCE",
-                        amount=0.0, 
-                        units=open_units,
-                        nav=0.0,
-                        balance=open_units
-                     )
-                     session.add(op_txn)
-                     new_txns_count += 1
-                     
-                     scheme_debug["transactions"].append({
-                        "id": op_txn_id,
-                        "date": start_date.isoformat(),
-                        "amount": 0.0,
-                        "units": open_units,
-                        "type": "OPENING_BALANCE",
-                        "status": "new (synthetic)"
-                     })
+                     # Check if we already have historical transactions (meaning we have broader history)
+                     prior_txns = session.exec(select(Transaction).where(
+                         Transaction.scheme_id == scheme_obj.id,
+                         Transaction.folio_id == folio_obj.id,
+                         Transaction.date < start_date
+                     )).first()
+
+                     if prior_txns:
+                         print(f"Skipping synthetic OPENING_BALANCE for {scheme_obj.name} as prior history exists.")
+                         scheme_debug["transactions"].append({
+                            "id": op_txn_id,
+                            "date": start_date.isoformat(),
+                            "amount": 0.0,
+                            "units": open_units,
+                            "type": "OPENING_BALANCE",
+                            "status": "skipped (prior history exists)"
+                         })
+                     else:
+                         op_txn = Transaction(
+                            id=op_txn_id,
+                            folio_id=folio_obj.id,
+                            scheme_id=scheme_obj.id,
+                            date=start_date,
+                            type="OPENING_BALANCE",
+                            amount=0.0, 
+                            units=open_units,
+                            nav=0.0,
+                            balance=open_units
+                         )
+                         session.add(op_txn)
+                         new_txns_count += 1
+                         
+                         scheme_debug["transactions"].append({
+                            "id": op_txn_id,
+                            "date": start_date.isoformat(),
+                            "amount": 0.0,
+                            "units": open_units,
+                            "type": "OPENING_BALANCE",
+                            "status": "new (synthetic)"
+                         })
 
             # Process Transactions
             transactions = scheme_data.get("transactions", [])
@@ -409,12 +448,12 @@ def process_cas_data(
             # --- RECONCILIATION logic ---
             # If we imported real transactions, check if they "precede" an existing OPENING_BALANCE
             if min_real_date:
-                # Find any OPENING_BALANCE for this scheme occurring ON or AFTER min_real_date
+                # Find any OPENING_BALANCE for this scheme occurring strictly AFTER min_real_date
                 to_delete = session.exec(select(Transaction).where(
                     Transaction.scheme_id == scheme_obj.id,
                     Transaction.folio_id == folio_obj.id,
                     Transaction.type == "OPENING_BALANCE",
-                    Transaction.date >= min_real_date
+                    Transaction.date > min_real_date
                 )).all()
                 
                 if to_delete:
@@ -427,7 +466,17 @@ def process_cas_data(
         
         debug_data["folios"].append(folio_debug) # DEBUG
     
-    # (Debug import dump removed — was writing to /data/ which only exists in Docker)
+    # 7. Debug Import Schema Dump
+    try:
+        import_dump_dir = "/data" if os.path.exists("/data") else os.path.join(BASE_DIR, "data")
+        os.makedirs(import_dump_dir, exist_ok=True)
+        import_path = os.path.join(import_dump_dir, "cas_import.json")
+        
+        with open(import_path, "w") as f:
+            json.dump(debug_data, f, indent=2, default=str)
+    except Exception as e:
+        print(f"Warning: Failed to write CAS debug import dump: {e}")
+        pass # Do not fail the entire upload process
 
     session.commit()
 

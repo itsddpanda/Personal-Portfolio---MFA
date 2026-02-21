@@ -165,7 +165,7 @@ export default function UserMenu() {
                     <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
                     <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg py-1 z-20 border border-gray-100">
                         <div className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase">
-                            {users.length > 0 ? "Select User" : "No users found"}
+                            {users.length > 0 ? "Select User" : "Upload CAS to create user"}
                         </div>
                         {users.map((user) => (
                             <button
