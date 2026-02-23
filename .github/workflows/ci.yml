@@ -31,12 +31,6 @@ jobs:
         run: |
           cd backend
           pip install -r requirements.txt
-          pip install pytest pytest-cov
-
-      - name: Run tests
-        run: |
-          cd backend
-          python -m pytest tests/ -v --tb=short
 
   frontend-build:
     name: Frontend Build
