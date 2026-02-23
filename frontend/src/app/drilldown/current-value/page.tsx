@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 interface Holding {
     scheme_name: string;
     isin: string;
+    amfi_code?: string;
     units: number;
     current_nav: number;
     current_value: number;
@@ -112,7 +113,13 @@ export default function CurrentValueDrilldownPage() {
                                     return (
                                         <tr key={h.isin} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
                                             <td className="px-6 py-5">
-                                                <p className="text-sm font-medium text-slate-800 dark:text-slate-300 line-clamp-2 leading-relaxed">{h.scheme_name}</p>
+                                                {h.amfi_code ? (
+                                                    <a href={`/scheme/${h.amfi_code}`} className="hover:underline hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
+                                                        <p className="text-sm font-medium text-slate-800 dark:text-slate-300 line-clamp-2 leading-relaxed">{h.scheme_name}</p>
+                                                    </a>
+                                                ) : (
+                                                    <p className="text-sm font-medium text-slate-800 dark:text-slate-300 line-clamp-2 leading-relaxed">{h.scheme_name}</p>
+                                                )}
                                                 <p className="text-xs text-slate-500 mt-1 font-mono">{h.isin}</p>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400 text-right font-mono tracking-tight">
