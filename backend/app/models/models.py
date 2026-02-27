@@ -157,6 +157,10 @@ class FundEnrichment(SQLModel, table=True):
 class FundPerformance(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     enrichment_id: int = Field(foreign_key="fundenrichment.id", unique=True)
+    returns_1y: Optional[float] = None
+    returns_3y: Optional[float] = None
+    returns_5y: Optional[float] = None
+    returns_tooltip: Optional[str] = None
     cagr_1y: Optional[float] = None
     cagr_3y: Optional[float] = None
     cagr_5y: Optional[float] = None

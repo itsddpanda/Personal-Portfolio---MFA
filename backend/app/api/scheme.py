@@ -261,7 +261,7 @@ def trigger_scheme_backfill(amfi_code: str, session: Session = Depends(get_sessi
 
 
 @router.get("/{amfi_code}/enrichment")
-def get_scheme_enrichment(amfi_code: str, session: Session = Depends(get_session)):
+def get_scheme_enrichment(amfi_code: str, force: bool = False, session: Session = Depends(get_session)):
     """
     Fetches the Fund Intelligence extended data. 
     Returns 503 if the DaaS API is computing it in the background.
@@ -276,8 +276,8 @@ def get_scheme_enrichment(amfi_code: str, session: Session = Depends(get_session
     ).first()
     
     if enrichment:
-        if should_purge(enrichment.fetched_at.date()):
-            # Cache expired, delete it and we'll fetch a new one
+        if force or should_purge(enrichment.fetched_at.date()):
+            # Cache expired or forced refresh, delete it and we'll fetch a new one
             session.delete(enrichment)
             session.commit()
             enrichment = None
@@ -313,9 +313,19 @@ def get_scheme_enrichment(amfi_code: str, session: Session = Depends(get_session
         "nav_validation_status": enrichment.nav_validation_status,
         "name_validation_status": enrichment.name_validation_status,
         "freshness_status": enrichment.freshness_status,
-        "performance": enrichment.performance.dict() if enrichment.performance else None,
-        "risk_metrics": enrichment.risk_metrics.dict() if enrichment.risk_metrics else None,
+        "performance": enrollment_performance_to_dict(enrichment.performance),
+        "risk_metrics": enrollment_risk_to_dict(enrichment.risk_metrics),
         "holdings": [h.dict() for h in enrichment.holdings],
         "peers": [p.dict() for p in enrichment.peers]
     }
+
+def enrollment_performance_to_dict(p):
+    if not p: return None
+    d = p.dict()
+    # Add explicit period mapping for easier frontend access if needed
+    return d
+
+def enrollment_risk_to_dict(r):
+    if not r: return None
+    return r.dict()
 

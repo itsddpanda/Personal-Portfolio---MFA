@@ -20,18 +20,19 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
     const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    const fetchData = async (showToast: boolean = false) => {
+    const fetchData = async (showToast: boolean = false, force: boolean = false) => {
         try {
             setError(null);
             if (!polling) setLoading(true);
+            if (force) setLoading(true); // Always show spinner on force refresh
 
-            const res = await getSchemeEnrichment(amfiCode);
+            const res = await getSchemeEnrichment(amfiCode, force);
             if (res) {
                 setData(res);
                 setPolling(false);
                 setCountdown(null);
                 clearTimeouts();
-                if (showToast) toast.success("Intelligence data loaded!");
+                if (showToast) toast.success(force ? "Data refreshed successfully!" : "Intelligence data loaded!");
             } else {
                 setData(null);
             }
@@ -170,16 +171,26 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
     return (
         <div className="mb-10 space-y-6">
             <div className="flex justify-between items-end border-b border-slate-200 dark:border-slate-800 pb-2">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-slate-200 px-1 drop-shadow-sm">Advanced Intelligence</h2>
+                <div className="flex items-center gap-3">
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-slate-200 px-1 drop-shadow-sm">Advanced Intelligence</h2>
+                    <button
+                        onClick={() => fetchData(true, true)}
+                        disabled={loading || polling}
+                        className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-lg transition-all"
+                        title="Re-analyze Fund"
+                    >
+                        <RefreshCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                    </button>
+                </div>
                 {renderValidationBadge()}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-                {/* Returns & Consistency Grid */}
+                {/* Risk & Performance Grid */}
                 {data.performance && data.risk_metrics && (
                     <div className="bg-white dark:bg-slate-900/50 rounded-2xl p-6 border border-slate-200 dark:border-white/5 shadow-sm">
-                        <div className="flex justify-between items-center mb-4">
+                        <div className="flex justify-between items-center mb-6">
                             <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-300">Risk-Adjusted Performance</h3>
                             <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
                                 {(["1y", "3y", "5y"] as const).map(p => (
@@ -194,62 +205,94 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <div className="flex items-center gap-1 mb-1">
-                                    <p className="text-[10px] text-slate-500 uppercase font-semibold">CAGR</p>
-                                    {data.performance.cagr_tooltip && (
-                                        <span title={data.performance.cagr_tooltip} className="cursor-help flex items-center">
-                                            <Info className="w-3 h-3 text-slate-400" />
-                                        </span>
+                        <div className="grid grid-cols-2 gap-y-6 gap-x-4">
+                            {/* Returns */}
+                            {data.performance[`returns_${period}`] !== null && (
+                                <div>
+                                    <div className="flex items-center gap-1 mb-1">
+                                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Returns</p>
+                                        {data.performance.returns_tooltip && (
+                                            <span title={data.performance.returns_tooltip} className="cursor-help flex items-center">
+                                                <Info className="w-3 h-3 text-slate-400" />
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-lg font-mono font-bold text-slate-900 dark:text-slate-100">
+                                        {data.performance[`returns_${period}`].toFixed(2)}%
+                                    </p>
+                                    {data.risk_metrics[`cat_avg_${period}`] !== null && (
+                                        <p className="text-[10px] text-slate-400 font-mono mt-1">Cat Avg: {data.risk_metrics[`cat_avg_${period}`].toFixed(2)}%</p>
                                     )}
                                 </div>
-                                <p className="text-lg font-mono font-bold text-slate-900 dark:text-slate-100">
-                                    {data.performance[`cagr_${period}`] ? `${data.performance[`cagr_${period}`].toFixed(2)}%` : '-'}
-                                </p>
-                                {data.risk_metrics[`cat_avg_${period}`] && (
-                                    <p className="text-[10px] text-slate-400 font-mono mt-1">Cat Avg: {data.risk_metrics[`cat_avg_${period}`].toFixed(2)}%</p>
-                                )}
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-1 mb-1">
-                                    <p className="text-[10px] text-slate-500 uppercase font-semibold">Volatility (Std Dev)</p>
-                                    {data.risk_metrics.risk_std_dev_tooltip && (
-                                        <span title={data.risk_metrics.risk_std_dev_tooltip} className="cursor-help flex items-center">
-                                            <Info className="w-3 h-3 text-slate-400" />
-                                        </span>
-                                    )}
+                            )}
+
+                            {/* Volatility / Deviation */}
+                            {data.risk_metrics[`risk_std_dev_${period}`] !== null && (
+                                <div>
+                                    <div className="flex items-center gap-1 mb-1">
+                                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Deviation</p>
+                                        {data.risk_metrics.risk_std_dev_tooltip && (
+                                            <span title={data.risk_metrics.risk_std_dev_tooltip} className="cursor-help flex items-center">
+                                                <Info className="w-3 h-3 text-slate-400" />
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-lg font-mono font-bold text-slate-900 dark:text-slate-100">
+                                        {data.risk_metrics[`risk_std_dev_${period}`].toFixed(2)}%
+                                    </p>
                                 </div>
-                                <p className="text-lg font-mono font-bold text-slate-900 dark:text-slate-100">
-                                    {data.risk_metrics[`risk_std_dev_${period}`] ? `${data.risk_metrics[`risk_std_dev_${period}`].toFixed(2)}%` : '-'}
-                                </p>
-                            </div>
-                            <div className="text-indigo-900/10">
-                                <div className="flex items-center gap-1 mb-1">
-                                    <p className="text-[10px] text-slate-500 uppercase font-semibold">Sharpe Ratio</p>
-                                    {data.risk_metrics.sharpe_ratio_tooltip && (
-                                        <span title={data.risk_metrics.sharpe_ratio_tooltip} className="cursor-help flex items-center">
-                                            <Info className="w-3 h-3 text-slate-400" />
-                                        </span>
-                                    )}
+                            )}
+
+                            {/* Sharpe Ratio */}
+                            {data.risk_metrics[`sharpe_ratio_${period}`] !== null && (
+                                <div>
+                                    <div className="flex items-center gap-1 mb-1">
+                                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Sharpe Ratio</p>
+                                        {data.risk_metrics.sharpe_ratio_tooltip && (
+                                            <span title={data.risk_metrics.sharpe_ratio_tooltip} className="cursor-help flex items-center">
+                                                <Info className="w-3 h-3 text-slate-400" />
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-lg font-mono font-bold text-slate-900 dark:text-slate-100">
+                                        {data.risk_metrics[`sharpe_ratio_${period}`].toFixed(2)}
+                                    </p>
                                 </div>
-                                <p className="text-lg font-mono font-bold text-slate-900 dark:text-slate-100">
-                                    {data.risk_metrics[`sharpe_ratio_${period}`] ? data.risk_metrics[`sharpe_ratio_${period}`].toFixed(2) : '-'}
-                                </p>
-                            </div>
-                            <div className="text-indigo-900/10">
-                                <div className="flex items-center gap-1 mb-1">
-                                    <p className="text-[10px] text-slate-500 uppercase font-semibold">Beta</p>
-                                    {data.risk_metrics.beta_tooltip && (
-                                        <span title={data.risk_metrics.beta_tooltip} className="cursor-help flex items-center">
-                                            <Info className="w-3 h-3 text-slate-400" />
-                                        </span>
-                                    )}
+                            )}
+
+                            {/* Sortino Ratio */}
+                            {data.risk_metrics[`sortino_ratio_${period}`] !== null && (
+                                <div>
+                                    <div className="flex items-center gap-1 mb-1">
+                                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Sortino Ratio</p>
+                                        {data.risk_metrics.sortino_ratio_tooltip && (
+                                            <span title={data.risk_metrics.sortino_ratio_tooltip} className="cursor-help flex items-center">
+                                                <Info className="w-3 h-3 text-slate-400" />
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-lg font-mono font-bold text-slate-900 dark:text-slate-100">
+                                        {data.risk_metrics[`sortino_ratio_${period}`].toFixed(2)}
+                                    </p>
                                 </div>
-                                <p className="text-lg font-mono font-bold text-slate-900 dark:text-slate-100">
-                                    {data.risk_metrics[`beta_${period}`] ? data.risk_metrics[`beta_${period}`].toFixed(2) : '-'}
-                                </p>
-                            </div>
+                            )}
+
+                            {/* Beta */}
+                            {data.risk_metrics[`beta_${period}`] !== null && (
+                                <div>
+                                    <div className="flex items-center gap-1 mb-1">
+                                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Beta</p>
+                                        {data.risk_metrics.beta_tooltip && (
+                                            <span title={data.risk_metrics.beta_tooltip} className="cursor-help flex items-center">
+                                                <Info className="w-3 h-3 text-slate-400" />
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-lg font-mono font-bold text-slate-900 dark:text-slate-100">
+                                        {data.risk_metrics[`beta_${period}`].toFixed(2)}
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
