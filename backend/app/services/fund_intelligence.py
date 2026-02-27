@@ -103,13 +103,9 @@ def parse_enrichment_response(scheme_id: int, data: Dict[str, Any], mfa_nav: Opt
     if history and len(history) > 0:
         latest_hist = history[-1]
         
-        # Parse CAGR
-        if latest_hist.get("cagr_metrics"):
-            cagr = latest_hist["cagr_metrics"]
-            enrichment.performance.cagr_1y = float(cagr.get("cagr", {}).get("1 Year", 0)) if cagr.get("cagr", {}).get("1 Year") else None
-            enrichment.performance.cagr_3y = float(cagr.get("cagr", {}).get("3 Years", 0)) if cagr.get("cagr", {}).get("3 Years") else None
-            enrichment.performance.cagr_5y = float(cagr.get("cagr", {}).get("5 Years", 0)) if cagr.get("cagr", {}).get("5 Years") else None
-            enrichment.performance.cagr_tooltip = get_tooltip(latest_hist.get("risk_metrics", {}), "returns") or "Compound Annual Growth Rate over the period."
+        # Ignore cagr_metrics array as per user feedback (incorrect source)
+        # We will populate performance.returns_* from the risk_metrics["returns"] object instead
+        pass
             
         # Parse Risk Metrics
         if latest_hist.get("risk_metrics"):
@@ -135,19 +131,28 @@ def parse_enrichment_response(scheme_id: int, data: Dict[str, Any], mfa_nav: Opt
             enrichment.risk_metrics.beta_5y = float(risk.get("beta", {}).get("5y", 0)) if risk.get("beta", {}).get("5y") else None
             enrichment.risk_metrics.beta_tooltip = get_tooltip(risk, "beta")
             
-            # Category averages (extracting from 'returns' object where they live in the response structure)
-            returns = risk.get("returns", {})
-            enrichment.risk_metrics.cat_avg_1y = float(returns.get("cat_avg_1y")) if returns.get("cat_avg_1y") else None
-            enrichment.risk_metrics.cat_avg_3y = float(returns.get("cat_avg_3y")) if returns.get("cat_avg_3y") else None
-            enrichment.risk_metrics.cat_avg_5y = float(returns.get("cat_avg_5y")) if returns.get("cat_avg_5y") else None
+            # Category averages (extracting from 'returns' object)
+            returns_obj = risk.get("returns", {})
             
-            enrichment.risk_metrics.cat_min_1y = float(returns.get("cat_min_1y")) if returns.get("cat_min_1y") else None
-            enrichment.risk_metrics.cat_min_3y = float(returns.get("cat_min_3y")) if returns.get("cat_min_3y") else None
-            enrichment.risk_metrics.cat_min_5y = float(returns.get("cat_min_5y")) if returns.get("cat_min_5y") else None
+            # Map returns from the risk_metrics.returns object as per feedback
+            enrichment.performance.returns_1y = float(returns_obj.get("1y", 0)) if returns_obj.get("1y") else None
+            enrichment.performance.returns_3y = float(returns_obj.get("3y", 0)) if returns_obj.get("3y") else None
+            enrichment.performance.returns_5y = float(returns_obj.get("5y", 0)) if returns_obj.get("5y") else None
             
-            enrichment.risk_metrics.cat_max_1y = float(returns.get("cat_max_1y")) if returns.get("cat_max_1y") else None
-            enrichment.risk_metrics.cat_max_3y = float(returns.get("cat_max_3y")) if returns.get("cat_max_3y") else None
-            enrichment.risk_metrics.cat_max_5y = float(returns.get("cat_max_5y")) if returns.get("cat_max_5y") else None
+            returns_tt = returns_obj.get("toolTipText", "")
+            enrichment.performance.returns_tooltip = returns_tt.split("<br/>")[0].strip() if returns_tt else "Percentage growth of the fund over the selected period."
+
+            enrichment.risk_metrics.cat_avg_1y = float(returns_obj.get("cat_avg_1y")) if returns_obj.get("cat_avg_1y") else None
+            enrichment.risk_metrics.cat_avg_3y = float(returns_obj.get("cat_avg_3y")) if returns_obj.get("cat_avg_3y") else None
+            enrichment.risk_metrics.cat_avg_5y = float(returns_obj.get("cat_avg_5y")) if returns_obj.get("cat_avg_5y") else None
+            
+            enrichment.risk_metrics.cat_min_1y = float(returns_obj.get("cat_min_1y")) if returns_obj.get("cat_min_1y") else None
+            enrichment.risk_metrics.cat_min_3y = float(returns_obj.get("cat_min_3y")) if returns_obj.get("cat_min_3y") else None
+            enrichment.risk_metrics.cat_min_5y = float(returns_obj.get("cat_min_5y")) if returns_obj.get("cat_min_5y") else None
+            
+            enrichment.risk_metrics.cat_max_1y = float(returns_obj.get("cat_max_1y")) if returns_obj.get("cat_max_1y") else None
+            enrichment.risk_metrics.cat_max_3y = float(returns_obj.get("cat_max_3y")) if returns_obj.get("cat_max_3y") else None
+            enrichment.risk_metrics.cat_max_5y = float(returns_obj.get("cat_max_5y")) if returns_obj.get("cat_max_5y") else None
             
 
     # 4. Holdings
