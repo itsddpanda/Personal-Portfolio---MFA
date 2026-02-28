@@ -290,7 +290,7 @@ def get_scheme_enrichment(amfi_code: str, force: bool = False, session: Session 
             if not raw_data:
                 raise HTTPException(status_code=404, detail="Intelligence data not found for this ISIN")
                 
-            enrichment = parse_enrichment_response(scheme.id, raw_data, mfa_nav=scheme.latest_nav, mfa_name=scheme.name)
+            enrichment = parse_enrichment_response(scheme.id, raw_data, mfa_nav=scheme.latest_nav, mfa_name=scheme.name, session=session)
             
             session.add(enrichment)
             session.commit()

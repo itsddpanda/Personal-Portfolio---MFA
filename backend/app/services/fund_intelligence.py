@@ -10,7 +10,9 @@ from app.models.models import (
     FundRiskMetrics,
     FundHolding,
     FundPeer,
+    Scheme,
 )
+from sqlmodel import Session, select
 from app.services.validation_engine import run_validations
 
 logger = logging.getLogger(__name__)
@@ -74,7 +76,7 @@ def fetch_fund_intelligence(isin: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def parse_enrichment_response(scheme_id: int, data: Dict[str, Any], mfa_nav: Optional[float] = None, mfa_name: Optional[str] = None) -> FundEnrichment:
+def parse_enrichment_response(scheme_id: int, data: Dict[str, Any], mfa_nav: Optional[float] = None, mfa_name: Optional[str] = None, session: Optional[Session] = None) -> FundEnrichment:
     """
     Parses the DaaS JSON dictionary into the local SQLAlchemy models.
     Does NOT save to DB - just builds the object graph.
@@ -84,7 +86,12 @@ def parse_enrichment_response(scheme_id: int, data: Dict[str, Any], mfa_nav: Opt
     enrichment = FundEnrichment(
         scheme_id=scheme_id,
         fund_name=data.get("fund_name", "Unknown Fund"),
-        fetched_at=datetime.utcnow()
+        fetched_at=datetime.utcnow(),
+        expense_ratio=data.get("expense_ratio"),
+        equity_alloc=data.get("equity_alloc"),
+        debt_alloc=data.get("debt_alloc"),
+        cash_alloc=data.get("cash_alloc"),
+        other_alloc=data.get("other_alloc")
     )
     
     # 2. Performance
@@ -187,8 +194,22 @@ def parse_enrichment_response(scheme_id: int, data: Dict[str, Any], mfa_nav: Opt
     peers_list = []
     for p in peers_data:
         if not p or not isinstance(p, dict): continue
+        
+        peer_name = p.get("peer_name") or p.get("fund_name")
+        peer_isin = p.get("peer_isin")
+        
+        if not peer_name and peer_isin and session:
+            # Fallback to local DB lookup
+            local_scheme = session.exec(select(Scheme).where(Scheme.isin == peer_isin)).first()
+            if local_scheme:
+                peer_name = local_scheme.name
+                
+        if not peer_name:
+            peer_name = "Unknown Peer"
+            
         peers_list.append(FundPeer(
-            fund_name=p.get("peer_name") or p.get("fund_name") or "Unknown Peer",
+            fund_name=peer_name,
+            peer_isin=peer_isin,
             return_3y=p.get("cagr_3y"),
             # Expense and Std Dev aren't explicitly in the peer array according to the doc exactly,
             # but we will extract from the flat if available per peer, otherwise None
