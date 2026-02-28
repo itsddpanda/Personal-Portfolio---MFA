@@ -1,7 +1,8 @@
 import os
+import json
 import logging
 import requests
-from datetime import datetime
+from datetime import datetime, date as dt_date
 from typing import Dict, Any, Optional
 
 from app.models.models import (
@@ -10,6 +11,7 @@ from app.models.models import (
     FundRiskMetrics,
     FundHolding,
     FundPeer,
+    FundManager,
     Scheme,
 )
 from sqlmodel import Session, select
@@ -51,6 +53,36 @@ def _get_name_from_navall(isin: str) -> Optional[str]:
                 logger.error(f"Failed to load NAVAll cache: {e}")
 
     return _isin_to_name_cache.get(isin)
+
+
+def _safe_float(val) -> Optional[float]:
+    """Safely convert a value to float, returning None on failure."""
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
+def _safe_int(val) -> Optional[int]:
+    """Safely convert a value to int, returning None on failure."""
+    if val is None:
+        return None
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return None
+
+
+def _safe_date(val) -> Optional[dt_date]:
+    """Safely parse a YYYY-MM-DD string to date, returning None on failure."""
+    if val is None:
+        return None
+    try:
+        return dt_date.fromisoformat(str(val)[:10])
+    except (ValueError, TypeError):
+        return None
 
 
 class DaasProcessingException(Exception):
@@ -127,16 +159,99 @@ def parse_enrichment_response(
     Does NOT save to DB - just builds the object graph.
     """
 
-    # 1. Base Enrichment Record
+    # Parse calculated_at timestamp
+    calc_at = data.get("calculated_at")
+    calculated_at_dt = None
+    if calc_at:
+        try:
+            calculated_at_dt = datetime.fromisoformat(str(calc_at))
+        except (ValueError, TypeError):
+            calculated_at_dt = None
+
+    # 1. Base Enrichment Record — all flat fields from API
     enrichment = FundEnrichment(
         scheme_id=scheme_id,
         fund_name=data.get("fund_name", "Unknown Fund"),
         fetched_at=datetime.utcnow(),
-        expense_ratio=data.get("expense_ratio"),
-        equity_alloc=data.get("equity_alloc"),
-        debt_alloc=data.get("debt_alloc"),
-        cash_alloc=data.get("cash_alloc"),
-        other_alloc=data.get("other_alloc"),
+
+        # Identifiers
+        code=data.get("code"),
+        morningstar_id=data.get("morningstar_id"),
+
+        # Fund metadata
+        scheme_short_name=data.get("scheme_short_name"),
+        category=data.get("category"),
+        sub_category=data.get("sub_category"),
+        fund_type=data.get("fund_type"),
+        plan_name=data.get("plan_name"),
+        option_name=data.get("option_name"),
+        payout_freq=data.get("payout_freq"),
+        inception_date=_safe_date(data.get("inception_date")),
+        benchmark=data.get("benchmark"),
+        riskometer=data.get("riskometer"),
+        investment_style=data.get("investment_style"),
+        rating=data.get("rating"),
+        objective=data.get("objective"),
+        is_active=data.get("is_active"),
+
+        # NAV snapshot
+        latest_nav_api=_safe_float(data.get("latest_nav")),
+        nav_change=_safe_float(data.get("nav_change")),
+        nav_change_percent=_safe_float(data.get("nav_change_percent")),
+        nav_date=_safe_date(data.get("nav_date")),
+
+        # AUM & Cost
+        aum_cr=_safe_float(data.get("aum_cr")),
+        expense_ratio=_safe_float(data.get("expense_ratio")),
+        turnover_ratio=_safe_float(data.get("turnover_ratio")),
+        turnover_ratio_cat_avg=_safe_float(data.get("turnover_ratio_cat_avg")),
+        exit_load=data.get("exit_load"),
+        lockin_period=data.get("lockin_period"),
+
+        # Valuation Ratios
+        pe=_safe_float(data.get("pe")),
+        cat_avg_pe=_safe_float(data.get("cat_avg_pe")),
+        pb=_safe_float(data.get("pb")),
+        cat_avg_pb=_safe_float(data.get("cat_avg_pb")),
+        price_sale=_safe_float(data.get("price_sale")),
+        cat_avg_price_sale=_safe_float(data.get("cat_avg_price_sale")),
+        price_cash_flow=_safe_float(data.get("price_cash_flow")),
+        cat_avg_price_cash_flow=_safe_float(data.get("cat_avg_price_cash_flow")),
+        dividend_yield=_safe_float(data.get("dividend_yield")),
+        cat_avg_dividend_yield=_safe_float(data.get("cat_avg_dividend_yield")),
+        roe=_safe_float(data.get("roe")),
+        cat_avg_roe=_safe_float(data.get("cat_avg_roe")),
+
+        # Debt fund metrics
+        yield_to_maturity=_safe_float(data.get("yield_to_maturity")),
+        modified_duration=_safe_float(data.get("modified_duration")),
+        avg_eff_maturity=_safe_float(data.get("avg_eff_maturity")),
+        avg_credit_quality_name=data.get("avg_credit_quality_name"),
+
+        # Asset Allocation
+        equity_alloc=_safe_float(data.get("equity_alloc")),
+        debt_alloc=_safe_float(data.get("debt_alloc")),
+        cash_alloc=_safe_float(data.get("cash_alloc")),
+        other_alloc=_safe_float(data.get("other_alloc")),
+
+        # Cap-weight breakdown
+        large_cap_wt=_safe_float(data.get("large_cap_wt")),
+        mid_cap_wt=_safe_float(data.get("mid_cap_wt")),
+        small_cap_wt=_safe_float(data.get("small_cap_wt")),
+        others_cap_wt=_safe_float(data.get("others_cap_wt")),
+
+        # Concentration metrics
+        number_of_holdings=_safe_int(data.get("number_of_holdings")),
+        avg_market_cap_cr=_safe_float(data.get("avg_market_cap_cr")),
+        top_3_sectors_weight=_safe_float(data.get("top_3_sectors_weight")),
+        top_5_stocks_weight=_safe_float(data.get("top_5_stocks_weight")),
+        top_10_stocks_weight=_safe_float(data.get("top_10_stocks_weight")),
+
+        # KBYI insights (stored as JSON text)
+        kbyi=json.dumps(data.get("kbyi")) if data.get("kbyi") else None,
+
+        # API calculation timestamp
+        calculated_at=calculated_at_dt,
     )
 
     # 2. Performance
@@ -159,9 +274,22 @@ def parse_enrichment_response(
     if history and len(history) > 0:
         latest_hist = history[-1]
 
-        # Ignore cagr_metrics array as per user feedback (incorrect source)
-        # We will populate performance.returns_* from the risk_metrics["returns"] object instead
-        pass
+        # Parse CAGR metrics from cagr_metrics object
+        cagr_metrics = latest_hist.get("cagr_metrics") or {}
+        cagr_vals = cagr_metrics.get("cagr", {})
+        cagr_ranks = cagr_metrics.get("cagr_rank_in_cat", {})
+
+        enrichment.performance.cagr_1y = _safe_float(cagr_vals.get("1 Year"))
+        enrichment.performance.cagr_3y = _safe_float(cagr_vals.get("3 Years"))
+        enrichment.performance.cagr_5y = _safe_float(cagr_vals.get("5 Years"))
+        enrichment.performance.cagr_10y = _safe_float(cagr_vals.get("10 Years"))
+
+        enrichment.performance.cagr_rank_1y = _safe_int(cagr_ranks.get("1 Year"))
+        enrichment.performance.cagr_rank_3y = _safe_int(cagr_ranks.get("3 Years"))
+        enrichment.performance.cagr_rank_5y = _safe_int(cagr_ranks.get("5 Years"))
+        enrichment.performance.cagr_rank_10y = _safe_int(cagr_ranks.get("10 Years"))
+
+        enrichment.performance.recorded_at = _safe_date(latest_hist.get("recorded_at"))
 
         # Parse Risk Metrics
         if latest_hist.get("risk_metrics"):
@@ -336,12 +464,18 @@ def parse_enrichment_response(
     for h in holdings_data:
         if not h or not isinstance(h, dict):
             continue
+        # Serialize holdings_history array to JSON text if present
+        hh = h.get("holdings_history")
+        hh_json = json.dumps(hh) if hh else None
+
         holdings_list.append(
             FundHolding(
                 stock_name=h.get("stock_name") or "Unknown Stock",
                 sector=h.get("sector"),
-                weighting=h.get("weighting"),
-                market_value=h.get("market_value"),
+                weighting=_safe_float(h.get("weighting")),
+                market_value=_safe_float(h.get("market_value")),
+                change_1m=_safe_float(h.get("change_1m")),
+                holdings_history=hh_json,
             )
         )
     enrichment.holdings = holdings_list
@@ -379,14 +513,38 @@ def parse_enrichment_response(
             FundPeer(
                 fund_name=peer_name,
                 peer_isin=peer_isin,
-                return_3y=p.get("cagr_3y"),
-                # Expense and Std Dev aren't explicitly in the peer array according to the doc exactly,
-                # but we will extract from the flat if available per peer, otherwise None
-                expense_ratio=p.get("expense_ratio"),
-                std_deviation=p.get("std_deviation"),
+                cagr_1y=_safe_float(p.get("cagr_1y")),
+                cagr_3y=_safe_float(p.get("cagr_3y")),
+                cagr_5y=_safe_float(p.get("cagr_5y")),
+                cagr_10y=_safe_float(p.get("cagr_10y")),
+                yield_to_maturity=_safe_float(p.get("yield_to_maturity")),
+                modified_duration=_safe_float(p.get("modified_duration")),
+                avg_eff_maturity=_safe_float(p.get("avg_eff_maturity")),
+                expense_ratio=_safe_float(p.get("expense_ratio")),
+                portfolio_turnover=_safe_float(p.get("portfolio_turnover")),
+                std_deviation=_safe_float(p.get("std_deviation")),
             )
         )
     enrichment.peers = peers_list
+
+    # 6. Fund Managers (NEW)
+    managers_data = data.get("fund_managers", [])
+    if not isinstance(managers_data, list):
+        managers_data = []
+
+    managers_list = []
+    for m in managers_data:
+        if not m or not isinstance(m, dict):
+            continue
+        managers_list.append(
+            FundManager(
+                manager_name=m.get("manager_name") or "Unknown Manager",
+                role=m.get("role"),
+                start_date=_safe_date(m.get("start_date")),
+                end_date=_safe_date(m.get("end_date")),
+            )
+        )
+    enrichment.managers = managers_list
 
     # Run Data Validation Engine (in-memory update)
     enrichment_nav = data.get("latest_nav")
