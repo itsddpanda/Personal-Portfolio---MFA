@@ -100,6 +100,11 @@ Stores the API fetch payload snapshot and governs lifecycle.
 - `nav_validation_status` (int)
 - `name_validation_status` (int)
 - `freshness_status` (int)
+- `expense_ratio` (float, nullable)
+- `equity_alloc` (float, nullable)
+- `debt_alloc` (float, nullable)
+- `cash_alloc` (float, nullable)
+- `other_alloc` (float, nullable)
 
 #### `fundperformance`
 - `id` (int, PK)
@@ -140,6 +145,7 @@ Stores the API fetch payload snapshot and governs lifecycle.
 - `id` (int, PK)
 - `enrichment_id` (int, FK -> fundenrichment.id, Index)
 - `fund_name` (str)
+- `peer_isin` (str, nullable)
 - `expense_ratio` (float, nullable)
 - `std_deviation` (float, nullable)
 - `return_3y` (float, nullable)

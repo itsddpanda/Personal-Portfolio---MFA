@@ -46,6 +46,7 @@ class HoldingDTO(BaseModel):
 
 class PeerDTO(BaseModel):
     fund_name: Optional[str]
+    peer_isin: Optional[str]
     expense_ratio: Optional[float]
     std_deviation: Optional[float]
     return_3y: Optional[float]
@@ -59,6 +60,12 @@ class EnrichmentDTO(BaseModel):
     nav_validation_status: int
     name_validation_status: int
     freshness_status: int
+    
+    expense_ratio: Optional[float]
+    equity_alloc: Optional[float]
+    debt_alloc: Optional[float]
+    cash_alloc: Optional[float]
+    other_alloc: Optional[float]
     
     performance: Optional[PerformanceDTO] = None
     risk_metrics: Optional[RiskMetricsDTO] = None

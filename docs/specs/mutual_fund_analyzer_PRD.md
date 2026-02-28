@@ -348,6 +348,19 @@ The local MFA application integrates with this by making standard client-side `f
 #### Feature 16.3: CAS Parser Tooling
 - **Story 16.3.1:** [Done] As a Developer, I want to regain the ability to inspect raw CAS schemas. Whenever a user uploads a statement, the system must write the debug `cas_schema.json` and `cas_import.json` dumps safely into the local `data/` volume.
 
+### Epic 17: Advanced Fund Intelligence (Phase 2)
+
+#### Feature 17.1: Hidden Data Extraction & Persistence
+- **Story 17.1.1:** [Done] Extended `FundEnrichment` DB models to capture `expense_ratio`, `equity_alloc`, `debt_alloc`, `cash_alloc`, and `other_alloc`.
+- **Story 17.1.2:** [Done] Updated `parse_enrichment_response` and API endpoints to stream the full parsed payload to the React frontend.
+
+#### Feature 17.2: Enhanced Scheme UI Insights
+- **Story 17.2.1:** [Done] **Portfolio Composition:** Implemented visual distribution of asset allocation (Equity, Debt, Cash). Added a smart badge evaluating Sector Concentration Risk based on top 5 holdings weight (e.g. >35% triggers High Concentration alert).
+- **Story 17.2.2:** [Done] **Peer Comparison Table:** Implemented a new Category Peers table displaying comparative expense ratios, 3Y returns, and volatility. Added gracefully expanding CSS formatting without text clipping.
+- **Story 17.2.3:** [Done] **Cost Drag Detection:** Created a badge to alert users when their fund's expense ratio is > 0.1% higher than the category median.
+- **Story 17.2.4:** [Done] **ISIN Resolution:** Automatically looks up `peer_isin` against the local core `Scheme` database to resolve correct names for any API-returned "Unknown Peer" entries. 
+- **Story 17.2.5:** [Done] **Symmetrical Risk UI:** Refined Tailwind flex grid layout applying strict hard-coded heights to ensure completely uniform Risk metric cards universally.
+
 ---
 
 ## 12. Fund Intelligence Specification

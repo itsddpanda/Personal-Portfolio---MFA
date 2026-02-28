@@ -128,6 +128,13 @@ class FundEnrichment(SQLModel, table=True):
     name_validation_status: int = Field(default=0)
     freshness_status: int = Field(default=0)
 
+    # Added for Phase 2: Portfolio Composition & Cost
+    expense_ratio: Optional[float] = None
+    equity_alloc: Optional[float] = None
+    debt_alloc: Optional[float] = None
+    cash_alloc: Optional[float] = None
+    other_alloc: Optional[float] = None
+
     
     performance: Optional["FundPerformance"] = Relationship(
         back_populates="enrichment",
@@ -216,6 +223,7 @@ class FundPeer(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     enrichment_id: int = Field(foreign_key="fundenrichment.id", index=True)
     fund_name: Optional[str] = Field(default="Unknown Peer")
+    peer_isin: Optional[str] = None
     expense_ratio: Optional[float] = None
     std_deviation: Optional[float] = None
     return_3y: Optional[float] = None
