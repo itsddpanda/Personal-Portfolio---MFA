@@ -74,7 +74,7 @@ def fetch_fund_intelligence(isin: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def parse_enrichment_response(scheme_id: int, data: Dict[str, Any], mfa_nav: Optional[float] = None) -> FundEnrichment:
+def parse_enrichment_response(scheme_id: int, data: Dict[str, Any], mfa_nav: Optional[float] = None, mfa_name: Optional[str] = None) -> FundEnrichment:
     """
     Parses the DaaS JSON dictionary into the local SQLAlchemy models.
     Does NOT save to DB - just builds the object graph.
@@ -117,22 +117,22 @@ def parse_enrichment_response(scheme_id: int, data: Dict[str, Any], mfa_nav: Opt
             enrichment.risk_metrics.sharpe_ratio_1y = float(risk.get("sharpe_ratio", {}).get("1y", 0)) if risk.get("sharpe_ratio", {}).get("1y") else None
             enrichment.risk_metrics.sharpe_ratio_3y = float(risk.get("sharpe_ratio", {}).get("3y", 0)) if risk.get("sharpe_ratio", {}).get("3y") else None
             enrichment.risk_metrics.sharpe_ratio_5y = float(risk.get("sharpe_ratio", {}).get("5y", 0)) if risk.get("sharpe_ratio", {}).get("5y") else None
-            enrichment.risk_metrics.sharpe_ratio_tooltip = get_tooltip(risk, "sharpe_ratio")
+            enrichment.risk_metrics.sharpe_ratio_tooltip = get_tooltip(risk, "sharpe_ratio", "Measures risk-adjusted performance. Higher is better.")
             
             enrichment.risk_metrics.sortino_ratio_1y = float(risk.get("sortino_ratio", {}).get("1y", 0)) if risk.get("sortino_ratio", {}).get("1y") else None
             enrichment.risk_metrics.sortino_ratio_3y = float(risk.get("sortino_ratio", {}).get("3y", 0)) if risk.get("sortino_ratio", {}).get("3y") else None
             enrichment.risk_metrics.sortino_ratio_5y = float(risk.get("sortino_ratio", {}).get("5y", 0)) if risk.get("sortino_ratio", {}).get("5y") else None
-            enrichment.risk_metrics.sortino_ratio_tooltip = get_tooltip(risk, "sortino_ratio")
+            enrichment.risk_metrics.sortino_ratio_tooltip = get_tooltip(risk, "sortino_ratio", "Measures downside risk-adjusted performance. Higher is better.")
             
             enrichment.risk_metrics.risk_std_dev_1y = float(risk.get("risk_std_dev", {}).get("1y", 0)) if risk.get("risk_std_dev", {}).get("1y") else None
             enrichment.risk_metrics.risk_std_dev_3y = float(risk.get("risk_std_dev", {}).get("3y", 0)) if risk.get("risk_std_dev", {}).get("3y") else None
             enrichment.risk_metrics.risk_std_dev_5y = float(risk.get("risk_std_dev", {}).get("5y", 0)) if risk.get("risk_std_dev", {}).get("5y") else None
-            enrichment.risk_metrics.risk_std_dev_tooltip = get_tooltip(risk, "risk_std_dev")
+            enrichment.risk_metrics.risk_std_dev_tooltip = get_tooltip(risk, "risk_std_dev", "Measures fund volatility. Lower generally indicates less risk.")
             
             enrichment.risk_metrics.beta_1y = float(risk.get("beta", {}).get("1y", 0)) if risk.get("beta", {}).get("1y") else None
             enrichment.risk_metrics.beta_3y = float(risk.get("beta", {}).get("3y", 0)) if risk.get("beta", {}).get("3y") else None
             enrichment.risk_metrics.beta_5y = float(risk.get("beta", {}).get("5y", 0)) if risk.get("beta", {}).get("5y") else None
-            enrichment.risk_metrics.beta_tooltip = get_tooltip(risk, "beta")
+            enrichment.risk_metrics.beta_tooltip = get_tooltip(risk, "beta", "Measures volatility relative to the broader market. Beta > 1 implies higher volatility.")
             
             # Category averages (extracting from 'returns' object)
             returns_obj = risk.get("returns", {})
@@ -199,6 +199,6 @@ def parse_enrichment_response(scheme_id: int, data: Dict[str, Any], mfa_nav: Opt
     
     # Run Data Validation Engine (in-memory update)
     enrichment_nav = data.get("latest_nav")
-    run_validations(enrichment, enrichment_nav=enrichment_nav, mfa_nav=mfa_nav)
+    run_validations(enrichment, enrichment_nav=enrichment_nav, mfa_nav=mfa_nav, mfa_name=mfa_name)
     
     return enrichment

@@ -37,12 +37,7 @@ class Scheme(SQLModel, table=True):
     # Backfill tracking (V1.4.1)
     last_history_sync: Optional[dt_date] = None
 
-    transactions: List["Transaction"] = Relationship(back_populates="scheme")
     nav_history: List["NavHistory"] = Relationship(back_populates="scheme")
-    enrichment: Optional["FundEnrichment"] = Relationship(
-        back_populates="scheme",
-        sa_relationship_kwargs={"uselist": False, "cascade": "all, delete-orphan"},
-    )
 
 
 
@@ -102,7 +97,6 @@ class Transaction(SQLModel, table=True):
     balance: Optional[float] = None
 
     folio: Folio = Relationship(back_populates="transactions")
-    scheme: Scheme = Relationship(back_populates="transactions")
 
     @staticmethod
     def generate_id(
@@ -134,7 +128,6 @@ class FundEnrichment(SQLModel, table=True):
     name_validation_status: int = Field(default=0)
     freshness_status: int = Field(default=0)
 
-    scheme: Scheme = Relationship(back_populates="enrichment")
     
     performance: Optional["FundPerformance"] = Relationship(
         back_populates="enrichment",

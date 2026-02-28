@@ -15,7 +15,8 @@ export default function UploadPage() {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [phase, setPhase] = useState<'IDLE' | 'READING' | 'UNDERSTANDING' | 'CALCULATING' | 'DONE'>('IDLE');
+    const [phase, setPhase] = useState<'IDLE' | 'READING' | 'UNDERSTANDING' | 'CALCULATING' | 'SYNCING' | 'DONE'>('IDLE');
+    const [syncProgress, setSyncProgress] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const router = useRouter();
     const toast = useToast();
@@ -50,13 +51,16 @@ export default function UploadPage() {
                 }
 
                 // Phase 3: Wait for NAV sync
-                setPhase('CALCULATING');
+                setPhase('SYNCING');
 
                 // Poll for up to 30 seconds
                 let attempts = 0;
                 while (attempts < 15) {
                     try {
                         const syncStatus = await getSyncStatus();
+                        if (syncStatus.progress) {
+                            setSyncProgress(syncStatus.progress);
+                        }
                         if (!syncStatus.is_syncing) {
                             break;
                         }
@@ -122,7 +126,7 @@ export default function UploadPage() {
 
     return (
         <>
-            <ProcessingOverlay phase={phase} visible={phase !== 'IDLE'} />
+            <ProcessingOverlay phase={phase} visible={phase !== 'IDLE'} detailText={syncProgress ? `${syncProgress} schemes loaded` : undefined} />
             <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 sm:p-6 lg:p-8 bg-transparent">
                 <Card className="w-full max-w-md border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xl" title="Upload CAS PDF">
                     <form onSubmit={handleSubmit} className="space-y-5">

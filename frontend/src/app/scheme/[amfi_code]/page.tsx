@@ -62,7 +62,7 @@ export default function SchemeDetailsPage() {
     useEffect(() => {
         const userId = localStorage.getItem('mfa_user_id');
         if (!userId) {
-            router.push('/');
+            router.push('/upload');
             return;
         }
 
