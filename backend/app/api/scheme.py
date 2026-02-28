@@ -14,6 +14,7 @@ from datetime import date
 
 from app.models.models import FundEnrichment
 from app.services.fund_intelligence import fetch_fund_intelligence, parse_enrichment_response, DaasProcessingException, DaasAuthException
+from app.services.interfaces.fund_intel import get_enrichment_for_scheme
 from app.services.cache_manager import should_purge
 
 router = APIRouter()
@@ -289,7 +290,7 @@ def get_scheme_enrichment(amfi_code: str, force: bool = False, session: Session 
             if not raw_data:
                 raise HTTPException(status_code=404, detail="Intelligence data not found for this ISIN")
                 
-            enrichment = parse_enrichment_response(scheme.id, raw_data, mfa_nav=scheme.latest_nav)
+            enrichment = parse_enrichment_response(scheme.id, raw_data, mfa_nav=scheme.latest_nav, mfa_name=scheme.name)
             
             session.add(enrichment)
             session.commit()
@@ -305,27 +306,10 @@ def get_scheme_enrichment(amfi_code: str, force: bool = False, session: Session 
         except DaasAuthException as e:
             raise HTTPException(status_code=500, detail="Intelligence API configuration error.")
             
-    # 3. Format strictly to ensure all nested relations are serialized properly without lazy-load issues
-    return {
-        "fund_name": enrichment.fund_name,
-        "fetched_at": enrichment.fetched_at.isoformat(),
-        "validation_status": enrichment.validation_status,
-        "nav_validation_status": enrichment.nav_validation_status,
-        "name_validation_status": enrichment.name_validation_status,
-        "freshness_status": enrichment.freshness_status,
-        "performance": enrollment_performance_to_dict(enrichment.performance),
-        "risk_metrics": enrollment_risk_to_dict(enrichment.risk_metrics),
-        "holdings": [h.dict() for h in enrichment.holdings],
-        "peers": [p.dict() for p in enrichment.peers]
-    }
-
-def enrollment_performance_to_dict(p):
-    if not p: return None
-    d = p.dict()
-    # Add explicit period mapping for easier frontend access if needed
-    return d
-
-def enrollment_risk_to_dict(r):
-    if not r: return None
-    return r.dict()
+    # 3. Retrieve through DTO layer to ensure encapsulation
+    dto = get_enrichment_for_scheme(session, scheme.id)
+    if not dto:
+        raise HTTPException(status_code=500, detail="Failed to retrieve enrichment DTO")
+        
+    return dto
 

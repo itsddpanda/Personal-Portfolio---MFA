@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getDashboardSummary, getSyncStatus, syncNavs } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import ProcessingOverlay from '@/components/ProcessingOverlay';
 
 interface Holding {
     scheme_name: string;
@@ -37,6 +38,7 @@ export default function DashboardPage() {
     const [data, setData] = useState<SummaryData | null>(null);
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
+    const [syncProgress, setSyncProgress] = useState<string | null>(null);
     const [showEstimatedBanner, setShowEstimatedBanner] = useState(true);
     const router = useRouter();
     const toast = useToast();
@@ -49,19 +51,23 @@ export default function DashboardPage() {
     const fetchData = React.useCallback(async (userId: string) => {
         try {
             const result = await getDashboardSummary(userId);
-            setData(result);
+            if (!result) {
+                router.push('/upload');
+            } else {
+                setData(result);
+            }
         } catch (error) {
             console.error("Failed to fetch dashboard", error);
             toast.error("Failed to load dashboard data.");
         } finally {
             setLoading(false);
         }
-    }, [toast]);
+    }, [toast, router]);
 
     useEffect(() => {
         const userId = localStorage.getItem('mfa_user_id');
         if (!userId) {
-            router.push('/');
+            router.push('/upload');
             return;
         }
 
@@ -92,6 +98,9 @@ export default function DashboardPage() {
                 }
 
                 setSyncing(status.is_syncing);
+                if (status.progress) {
+                    setSyncProgress(status.progress);
+                }
 
                 // Smart polling: every 5s if active, 60s if idle
                 const nextInterval = status.is_syncing ? 5000 : 60000;
@@ -127,23 +136,18 @@ export default function DashboardPage() {
         }
     };
 
-    if (loading) {
-        return <div className="p-8 text-center text-slate-500 dark:text-slate-400 mt-20 animate-pulse">Loading Portfolio...</div>;
+    if (loading || (syncing && !data)) {
+        return (
+            <div className="min-h-screen">
+                <ProcessingOverlay phase={syncing ? 'SYNCING' : 'READING'} visible={true} detailText={syncProgress ? `${syncProgress} schemes loaded` : undefined} />
+            </div>
+        );
     }
 
     if (!data) {
         return (
             <div className="min-h-[80vh] flex items-center justify-center p-6 bg-transparent">
-                <Card title="Welcome to Portfolio Analyzer" className="max-w-md w-full text-center border bg-white dark:bg-slate-900 shadow-xl">
-                    <p className="text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">
-                        No portfolio data found. Upload your Consolidated Account Statement (CAS) to get started.
-                    </p>
-                    <div className="flex justify-center">
-                        <Button onClick={() => router.push('/upload')}>
-                            Upload CAS
-                        </Button>
-                    </div>
-                </Card>
+                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500"></div>
             </div>
         );
     }
@@ -170,7 +174,7 @@ export default function DashboardPage() {
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>
-                                Syncing NAVs...
+                                Syncing NAVs... {syncProgress ? `(${syncProgress})` : ''}
                             </div>
                         ) : (
                             <div className={`text-sm font-medium px-3 py-1.5 rounded-full border bg-slate-50 dark:bg-slate-950/50 ${isStale ? 'text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-500/20' : 'text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/5'}`}>
