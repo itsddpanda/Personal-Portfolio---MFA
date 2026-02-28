@@ -389,7 +389,7 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                 {data.peers?.length > 0 && (() => {
                     const validPeers = data.peers.filter((p: any) => p.expense_ratio != null);
                     const hasExpenseRatio = data.peers.some((p: any) => p.expense_ratio != null);
-                    const hasReturn3Y = data.peers.some((p: any) => p.return_3y != null);
+                    const hasReturn3Y = data.peers.some((p: any) => p.cagr_3y != null);
                     const hasStdDev = data.peers.some((p: any) => p.std_deviation != null);
 
                     return (
@@ -429,7 +429,7 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                                         {/* Sort peers by 3Y return descending */}
-                                        {data.peers.sort((a: any, b: any) => (b.return_3y || 0) - (a.return_3y || 0)).map((peer: any, i: number) => {
+                                        {data.peers.sort((a: any, b: any) => (b.cagr_3y || 0) - (a.cagr_3y || 0)).map((peer: any, i: number) => {
                                             return (
                                                 <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                                                     <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
@@ -445,9 +445,9 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                                                     )}
                                                     {hasReturn3Y && (
                                                         <td className="px-4 py-3 text-right font-mono font-medium text-slate-900 dark:text-slate-400 block sm:table-cell">
-                                                            {peer.return_3y != null ? (
-                                                                <span className={peer.return_3y > 0 ? "text-emerald-500" : peer.return_3y < 0 ? "text-rose-500" : ""}>
-                                                                    {peer.return_3y.toFixed(2)}%
+                                                            {peer.cagr_3y != null ? (
+                                                                <span className={peer.cagr_3y > 0 ? "text-emerald-500" : peer.cagr_3y < 0 ? "text-rose-500" : ""}>
+                                                                    {peer.cagr_3y.toFixed(2)}%
                                                                 </span>
                                                             ) : '-'}
                                                         </td>
