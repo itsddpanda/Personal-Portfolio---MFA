@@ -68,7 +68,7 @@ def compute_overall_validation_status(nav_status: int, name_status: int, freshne
     return max(statuses) # max integer value happens to correspond to the worst semantic status (3)
 
 
-def run_validations(enrichment: FundEnrichment, enrichment_nav: float = None, mfa_nav: float = None):
+def run_validations(enrichment: FundEnrichment, enrichment_nav: float = None, mfa_nav: float = None, mfa_name: str = None):
     """
     Runs V1, V2, V3 engines against the enrichment payload and mutates the status metrics in-place.
     """
@@ -78,7 +78,6 @@ def run_validations(enrichment: FundEnrichment, enrichment_nav: float = None, mf
     enrichment.nav_validation_status = validate_nav(enrichment_nav, mfa_nav)
     
     # V2: Name Match (Relies on Scheme linkage downstream, we'll assume mfa_name is available or loaded by caller)
-    mfa_name = enrichment.scheme.name if enrichment.scheme else None
     enrichment.name_validation_status = validate_name(enrichment.fund_name, mfa_name)
 
     # V3: Freshness
