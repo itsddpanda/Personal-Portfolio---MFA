@@ -98,8 +98,11 @@ export class RetryableError extends Error {
     }
 }
 
-export async function getSchemeEnrichment(amfiCode: string) {
-    const res = await fetch(`${API_BASE}/scheme/${amfiCode}/enrichment`);
+export async function getSchemeEnrichment(amfiCode: string, force: boolean = false) {
+    const url = force
+        ? `${API_BASE}/scheme/${amfiCode}/enrichment?force=true`
+        : `${API_BASE}/scheme/${amfiCode}/enrichment`;
+    const res = await fetch(url);
 
     if (res.status === 503) {
         // Backend DaaS triggers a background calc.
