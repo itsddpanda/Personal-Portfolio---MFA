@@ -6,7 +6,7 @@ import { getSchemeEnrichment, RetryableError } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
-import { Sparkles, RefreshCcw, AlertTriangle, Clock, Info } from 'lucide-react';
+import { Sparkles, RefreshCcw, AlertTriangle, Clock, Info, CheckCircle2, TrendingUp, TrendingDown, ShieldCheck, Users, Briefcase, ChevronRight, Activity } from 'lucide-react';
 
 export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
     const [data, setData] = useState<any | null>(null);
@@ -164,9 +164,26 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
         if (validation_status === 2) {
             return <span title="Minor data discrepancy (e.g., NAV difference ≤ 5% or data freshness > 30 days) compared to official records. Core analysis remains sound." className="cursor-help inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Minor Variance</span>;
         }
-        // Assuming 3 is failure
-        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800"><span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Unverified Data</span>;
+        if (validation_status === 3) {
+            return <span title="Significant data discrepancy detected. NAV or fund name does not match official records." className="cursor-help inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800"><span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Unverified Data</span>;
+        }
+        // Status 0 = Unvalidated (not enough data for cross-validation)
+        return <span title="Validation checks could not run — awaiting cross-reference data." className="cursor-help inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800/50 dark:text-slate-400 border border-slate-200 dark:border-slate-700"><span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Pending Validation</span>;
     };
+
+    // Parse KBYI Insights
+    let insights: any[] = [];
+    if (data?.kbyi) {
+        try {
+            insights = JSON.parse(data.kbyi);
+        } catch (e) {
+            console.error("Failed to parse kbyi insights", e);
+        }
+    }
+
+    // Determine primary asset class
+    const isDebtFund = data?.debt_alloc > 50 || data?.yield_to_maturity != null;
+    const isEquityFund = data?.equity_alloc > 50 || data?.pe != null;
 
     return (
         <div className="mb-10 space-y-6">
@@ -184,6 +201,86 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                 </div>
                 {renderValidationBadge()}
             </div>
+
+            {/* Fund Overview Strip */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">AUM (Cr)</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100 font-mono">
+                        {data.aum_cr != null ? `₹${data.aum_cr.toLocaleString('en-IN')}` : '-'}
+                    </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Expense Ratio</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100 font-mono">
+                        {data.expense_ratio != null ? `${data.expense_ratio}%` : '-'}
+                    </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Inception</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100 font-mono">
+                        {data.inception_date ? new Date(data.inception_date).toLocaleDateString() : '-'}
+                    </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Benchmark</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100 text-xs truncate" title={data.benchmark || '-'}>
+                        {data.benchmark || '-'}
+                    </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Riskometer</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100 text-xs">
+                        {data.riskometer || '-'}
+                    </p>
+                </div>
+            </div>
+
+            {/* AI Insights (KBYI) */}
+            {insights.length > 0 && (
+                <div className="bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/20 dark:to-slate-900 border border-indigo-100 dark:border-indigo-500/10 rounded-2xl p-6 shadow-sm">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Sparkles className="w-5 h-5 text-indigo-500" />
+                        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-200">Key Highlights</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {insights.map((insight, idx) => {
+                            const key = Object.keys(insight)[0];
+                            const content = insight[key];
+
+                            // Determine icon based on key type
+                            let Icon = Info;
+                            let iconColor = "text-slate-400";
+                            let bgColor = "bg-slate-100 dark:bg-slate-800";
+
+                            if (key.toLowerCase().includes('performer') || key.toLowerCase().includes('return')) {
+                                Icon = TrendingUp;
+                                iconColor = "text-emerald-500";
+                                bgColor = "bg-emerald-100 dark:bg-emerald-900/30";
+                            } else if (key.toLowerCase().includes('cost') || key.toLowerCase().includes('expense')) {
+                                Icon = ShieldCheck;
+                                iconColor = "text-sky-500";
+                                bgColor = "bg-sky-100 dark:bg-sky-900/30";
+                            } else if (key.toLowerCase().includes('volatility') || key.toLowerCase().includes('risk')) {
+                                Icon = Activity;
+                                iconColor = "text-amber-500";
+                                bgColor = "bg-amber-100 dark:bg-amber-900/30";
+                            }
+
+                            return (
+                                <div key={idx} className="flex gap-3 items-start bg-white dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                                    <div className={`p-2 rounded-lg ${bgColor} shrink-0`}>
+                                        <Icon className={`w-4 h-4 ${iconColor}`} />
+                                    </div>
+                                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                                        {content.text}
+                                    </p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
@@ -323,6 +420,74 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                     </div>
                 )}
 
+                {/* Valuations & Fundamentals */}
+                {((isEquityFund && (data.pe != null || data.pb != null)) || (isDebtFund && (data.yield_to_maturity != null || data.modified_duration != null))) && (
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 rounded-2xl shadow-sm dark:shadow-xl p-6 transition-all hover:shadow-md dark:hover:bg-slate-900/80 flex flex-col">
+                        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-200 mb-6">
+                            {isEquityFund ? "Valuation & Fundamentals" : "Debt Characteristics"}
+                        </h3>
+                        <div className="grid grid-cols-2 gap-4">
+                            {isEquityFund ? (
+                                <>
+                                    {data.pe != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">P/E Ratio</p>
+                                            <p className="text-lg font-bold font-mono text-slate-700 dark:text-slate-300">{data.pe.toFixed(2)}</p>
+                                            {data.cat_avg_pe != null && <p className="text-[10px] text-slate-400 mt-1 font-mono">Cat Avg: {data.cat_avg_pe.toFixed(2)}</p>}
+                                        </div>
+                                    )}
+                                    {data.pb != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">P/B Ratio</p>
+                                            <p className="text-lg font-bold font-mono text-slate-700 dark:text-slate-300">{data.pb.toFixed(2)}</p>
+                                            {data.cat_avg_pb != null && <p className="text-[10px] text-slate-400 mt-1 font-mono">Cat Avg: {data.cat_avg_pb.toFixed(2)}</p>}
+                                        </div>
+                                    )}
+                                    {data.dividend_yield != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">Div. Yield</p>
+                                            <p className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400">{data.dividend_yield.toFixed(2)}%</p>
+                                        </div>
+                                    )}
+                                    {data.turnover_ratio != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">Turnover</p>
+                                            <p className="text-lg font-bold font-mono text-slate-700 dark:text-slate-300">{data.turnover_ratio.toFixed(2)}%</p>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    {data.yield_to_maturity != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">YTM</p>
+                                            <p className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400">{data.yield_to_maturity.toFixed(2)}%</p>
+                                        </div>
+                                    )}
+                                    {data.modified_duration != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">Mod. Duration</p>
+                                            <p className="text-lg font-bold font-mono text-slate-700 dark:text-slate-300">{data.modified_duration.toFixed(2)} yrs</p>
+                                        </div>
+                                    )}
+                                    {data.avg_eff_maturity != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">Avg Maturity</p>
+                                            <p className="text-lg font-bold font-mono text-slate-700 dark:text-slate-300">{data.avg_eff_maturity.toFixed(2)} yrs</p>
+                                        </div>
+                                    )}
+                                    {data.avg_credit_quality_name != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">Credit Qual.</p>
+                                            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{data.avg_credit_quality_name}</p>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* Portfolio Composition (Holdings & Allocation) */}
                 {(data.holdings?.length > 0 || data.equity_alloc != null) && (
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 rounded-2xl shadow-sm dark:shadow-xl overflow-hidden flex flex-col transition-all hover:shadow-md dark:hover:bg-slate-900/80">
@@ -343,24 +508,44 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                         </div>
 
                         <div className="p-6 flex flex-col gap-6">
-                            {/* Asset Allocation Bar */}
-                            {(data.equity_alloc != null || data.debt_alloc != null || data.cash_alloc != null) && (
-                                <div>
-                                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Asset Allocation</h4>
-                                    <div className="flex h-3 md:h-4 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
-                                        {data.equity_alloc > 0 && <div style={{ width: `${data.equity_alloc}%` }} className="bg-indigo-500" title={`Equity: ${data.equity_alloc}%`} />}
-                                        {data.debt_alloc > 0 && <div style={{ width: `${data.debt_alloc}%` }} className="bg-sky-500" title={`Debt: ${data.debt_alloc}%`} />}
-                                        {data.cash_alloc > 0 && <div style={{ width: `${data.cash_alloc}%` }} className="bg-emerald-500" title={`Cash: ${data.cash_alloc}%`} />}
-                                        {data.other_alloc > 0 && <div style={{ width: `${data.other_alloc}%` }} className="bg-amber-500" title={`Other: ${data.other_alloc}%`} />}
+                            {/* Asset Allocation & Market Cap Bar */}
+                            <div className="space-y-5">
+                                {(data.equity_alloc != null || data.debt_alloc != null || data.cash_alloc != null) && (
+                                    <div>
+                                        <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Asset Allocation</h4>
+                                        <div className="flex h-3 md:h-4 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+                                            {data.equity_alloc > 0 && <div style={{ width: `${data.equity_alloc}%` }} className="bg-indigo-500" title={`Equity: ${data.equity_alloc}%`} />}
+                                            {data.debt_alloc > 0 && <div style={{ width: `${data.debt_alloc}%` }} className="bg-sky-500" title={`Debt: ${data.debt_alloc}%`} />}
+                                            {data.cash_alloc > 0 && <div style={{ width: `${data.cash_alloc}%` }} className="bg-emerald-500" title={`Cash: ${data.cash_alloc}%`} />}
+                                            {data.other_alloc > 0 && <div style={{ width: `${data.other_alloc}%` }} className="bg-amber-500" title={`Other: ${data.other_alloc}%`} />}
+                                        </div>
+                                        <div className="flex gap-4 mt-2 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                                            {data.equity_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-500" />Equity: {data.equity_alloc}%</span>}
+                                            {data.debt_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-sky-500" />Debt: {data.debt_alloc}%</span>}
+                                            {data.cash_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" />Cash: {data.cash_alloc}%</span>}
+                                            {data.other_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Other: {data.other_alloc}%</span>}
+                                        </div>
                                     </div>
-                                    <div className="flex gap-4 mt-2 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                                        {data.equity_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-500" />Equity: {data.equity_alloc}%</span>}
-                                        {data.debt_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-sky-500" />Debt: {data.debt_alloc}%</span>}
-                                        {data.cash_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" />Cash: {data.cash_alloc}%</span>}
-                                        {data.other_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Other: {data.other_alloc}%</span>}
+                                )}
+
+                                {/* Market Cap Allocation */}
+                                {isEquityFund && (data.large_cap_wt != null || data.mid_cap_wt != null || data.small_cap_wt != null) && (
+                                    <div>
+                                        <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Market Cap</h4>
+                                        <div className="flex h-3 md:h-4 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+                                            {data.large_cap_wt > 0 && <div style={{ width: `${data.large_cap_wt}%` }} className="bg-indigo-600" title={`Large Cap: ${data.large_cap_wt}%`} />}
+                                            {data.mid_cap_wt > 0 && <div style={{ width: `${data.mid_cap_wt}%` }} className="bg-indigo-400" title={`Mid Cap: ${data.mid_cap_wt}%`} />}
+                                            {data.small_cap_wt > 0 && <div style={{ width: `${data.small_cap_wt}%` }} className="bg-indigo-300" title={`Small Cap: ${data.small_cap_wt}%`} />}
+                                            {data.others_cap_wt > 0 && <div style={{ width: `${data.others_cap_wt}%` }} className="bg-slate-400" title={`Other/Unclassified: ${data.others_cap_wt}%`} />}
+                                        </div>
+                                        <div className="flex flex-wrap gap-4 mt-2 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                                            {data.large_cap_wt > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-600" />Large: {data.large_cap_wt}%</span>}
+                                            {data.mid_cap_wt > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-400" />Mid: {data.mid_cap_wt}%</span>}
+                                            {data.small_cap_wt > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-300" />Small: {data.small_cap_wt}%</span>}
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
 
                             {/* Top Holdings */}
                             {data.holdings?.length > 0 && (
@@ -467,6 +652,54 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                     );
                 })()}
             </div>
+
+            {/* Fund Management */}
+            {data.managers?.length > 0 && (
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 rounded-2xl shadow-sm overflow-hidden flex flex-col transition-all">
+                    <div className="p-6 pb-4 border-b border-slate-100 dark:border-white/5">
+                        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-200">Fund Managers</h3>
+                    </div>
+                    <div className="p-0">
+                        <ul className="divide-y divide-slate-100 dark:divide-white/5">
+                            {data.managers.map((m: any, idx: number) => {
+                                // Calculate tenure string
+                                let tenureStr = "Present";
+                                if (m.start_date) {
+                                    const sd = new Date(m.start_date);
+                                    let ed = new Date();
+                                    if (m.end_date) {
+                                        ed = new Date(m.end_date);
+                                        tenureStr = `${sd.getFullYear()} - ${ed.getFullYear()}`;
+                                    } else {
+                                        const diffTime = Math.abs(ed.getTime() - sd.getTime());
+                                        const diffYears = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365));
+                                        const diffMonths = Math.floor((diffTime % (1000 * 60 * 60 * 24 * 365)) / (1000 * 60 * 60 * 24 * 30));
+                                        tenureStr = `Since ${sd.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} (${diffYears}y ${diffMonths}m)`;
+                                    }
+                                }
+
+                                return (
+                                    <li key={idx} className="flex flex-col sm:flex-row p-4 sm:p-6 sm:items-center justify-between gap-4 hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
+                                                <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                                            </div>
+                                            <div>
+                                                <p className="font-semibold text-slate-900 dark:text-slate-100">{m.manager_name}</p>
+                                                <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Briefcase className="w-3 h-3" /> {m.role || 'Fund Manager'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="sm:text-right shrink-0">
+                                            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1 font-medium">Tenure</p>
+                                            <p className="text-sm font-mono text-slate-700 dark:text-slate-300">{tenureStr}</p>
+                                        </div>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
+                </div>
+            )}
 
 
             <div className="text-right">

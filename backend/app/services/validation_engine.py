@@ -81,7 +81,7 @@ def run_validations(
     """
     Runs V1, V2, V3 engines against the enrichment payload and mutates the status metrics in-place.
     """
-    logger.info(f"Running data validation engine for Scheme ID {enrichment.scheme_id}")
+    logger.info(f"Running data validation engine for Scheme ID {enrichment.fund_name}")
 
     # V1: NAV Match
     enrichment.nav_validation_status = validate_nav(enrichment_nav, mfa_nav)

@@ -139,7 +139,7 @@ export default function DashboardPage() {
     if (loading || (syncing && !data)) {
         return (
             <div className="min-h-screen">
-                <ProcessingOverlay phase={syncing ? 'SYNCING' : 'READING'} visible={true} detailText={syncProgress ? `${syncProgress} schemes loaded` : undefined} />
+                <ProcessingOverlay phase={syncing ? 'SYNCING' : 'READING'} visible={true} detailText={syncProgress && syncProgress !== '0/0' ? `${syncProgress} schemes loaded` : undefined} />
             </div>
         );
     }
@@ -174,7 +174,7 @@ export default function DashboardPage() {
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>
-                                Syncing NAVs... {syncProgress ? `(${syncProgress})` : ''}
+                                Syncing NAVs... {syncProgress && syncProgress !== '0/0' ? `(${syncProgress})` : ''}
                             </div>
                         ) : (
                             <div className={`text-sm font-medium px-3 py-1.5 rounded-full border bg-slate-50 dark:bg-slate-950/50 ${isStale ? 'text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-500/20' : 'text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/5'}`}>
