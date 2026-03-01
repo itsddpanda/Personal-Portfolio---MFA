@@ -14,7 +14,8 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
     const [polling, setPolling] = useState(false);
     const [countdown, setCountdown] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [period, setPeriod] = useState<"1y" | "3y" | "5y">("3y");
+    const [period, setPeriod] = useState<"1y" | "3y" | "5y">("1y");
+    const [peerPeriod, setPeerPeriod] = useState<"1y" | "3y" | "5y">("1y");
     const toast = useToast();
 
     const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -237,7 +238,7 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
             </div>
 
             {/* AI Insights (KBYI) */}
-            {insights.length > 0 && (
+            {insights.length > 0 && insights.some(i => i[Object.keys(i)[0]]?.text) && (
                 <div className="bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/20 dark:to-slate-900 border border-indigo-100 dark:border-indigo-500/10 rounded-2xl p-6 shadow-sm">
                     <div className="flex items-center gap-2 mb-4">
                         <Sparkles className="w-5 h-5 text-indigo-500" />
@@ -247,6 +248,27 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                         {insights.map((insight, idx) => {
                             const key = Object.keys(insight)[0];
                             const content = insight[key];
+
+                            if (!content || !content.text) return null;
+
+                            // Clean up trailing "across ." artifacts from API Generation
+                            let rawText = content.text as string;
+                            rawText = rawText.replace(/across\s+\.$/, ".");
+
+                            // Intelligently replace {{template}} string tags with actual values or strip brackets
+                            rawText = rawText.replace(/\{\{(.*?)\}\}/g, (match, p1) => {
+                                const lowerP1 = p1.toLowerCase();
+                                if (lowerP1.includes('expense ratio') && data.expense_ratio != null) {
+                                    return `${p1} (${data.expense_ratio}%)`;
+                                }
+                                if (lowerP1.includes('turnover') && data.turnover_ratio != null) {
+                                    return `${p1} (${data.turnover_ratio}%)`;
+                                }
+                                if ((lowerP1.includes('aum') || lowerP1.includes('size')) && data.aum_cr != null) {
+                                    return `${p1} (₹${data.aum_cr.toLocaleString('en-IN')} Cr)`;
+                                }
+                                return p1; // Fallback: just strip the brackets
+                            });
 
                             // Determine icon based on key type
                             let Icon = Info;
@@ -273,7 +295,7 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                                         <Icon className={`w-4 h-4 ${iconColor}`} />
                                     </div>
                                     <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                                        {content.text}
+                                        {rawText}
                                     </p>
                                 </div>
                             );
@@ -545,6 +567,40 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Sector Distribution */}
+                                {data.holdings?.some((h: any) => h.sector && h.weighting) && (() => {
+                                    const sectorMap: Record<string, number> = {};
+                                    data.holdings.forEach((h: any) => {
+                                        if (h.sector && h.weighting) {
+                                            sectorMap[h.sector] = (sectorMap[h.sector] || 0) + h.weighting;
+                                        }
+                                    });
+                                    const topSectors = Object.entries(sectorMap)
+                                        .sort(([, a], [, b]) => b - a)
+                                        .slice(0, 5);
+
+                                    const colors = ["bg-indigo-600", "bg-sky-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500"];
+
+                                    return (
+                                        <div>
+                                            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Top Sectors</h4>
+                                            <div className="flex h-3 md:h-4 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+                                                {topSectors.map(([sector, weight], idx) => (
+                                                    <div key={sector} style={{ width: `${weight}%` }} className={colors[idx % colors.length]} title={`${sector}: ${weight.toFixed(2)}%`} />
+                                                ))}
+                                            </div>
+                                            <div className="flex flex-wrap gap-4 mt-2 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                                                {topSectors.map(([sector, weight], idx) => (
+                                                    <span key={sector} className="flex items-center gap-1">
+                                                        <span className={`w-2 h-2 rounded-full ${colors[idx % colors.length]}`} />
+                                                        {sector}: {weight.toFixed(2)}%
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
 
                             {/* Top Holdings */}
@@ -574,33 +630,47 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                 {data.peers?.length > 0 && (() => {
                     const validPeers = data.peers.filter((p: any) => p.expense_ratio != null);
                     const hasExpenseRatio = data.peers.some((p: any) => p.expense_ratio != null);
-                    const hasReturn3Y = data.peers.some((p: any) => p.cagr_3y != null);
+                    const returnKey = `cagr_${peerPeriod}`;
+                    const hasReturn = data.peers.some((p: any) => p[returnKey] != null);
                     const hasStdDev = data.peers.some((p: any) => p.std_deviation != null);
 
                     return (
                         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 rounded-2xl shadow-sm dark:shadow-xl overflow-hidden flex flex-col transition-all hover:shadow-md dark:hover:bg-slate-900/80">
                             <div className="p-6 pb-4 border-b border-slate-100 dark:border-white/5 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                                 <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-200">Category Peers Comparison</h3>
-                                {/* Cost Drag Badge */}
-                                {(() => {
-                                    if (data.expense_ratio == null || validPeers.length === 0) return null;
+                                <div className="flex items-center gap-4 flex-wrap">
+                                    <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 shrink-0">
+                                        {(["1y", "3y", "5y"] as const).map(p => (
+                                            <button
+                                                key={p}
+                                                onClick={() => setPeerPeriod(p)}
+                                                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${peerPeriod === p ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                            >
+                                                {p.toUpperCase()}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {/* Cost Drag Badge */}
+                                    {(() => {
+                                        if (data.expense_ratio == null || validPeers.length === 0) return null;
 
-                                    const peerMedian = [...validPeers]
-                                        .sort((a: any, b: any) => a.expense_ratio - b.expense_ratio)
-                                    [Math.floor(validPeers.length / 2)].expense_ratio;
+                                        const peerMedian = [...validPeers]
+                                            .sort((a: any, b: any) => a.expense_ratio - b.expense_ratio)
+                                        [Math.floor(validPeers.length / 2)].expense_ratio;
 
-                                    const delta = data.expense_ratio - peerMedian;
+                                        const delta = data.expense_ratio - peerMedian;
 
-                                    if (delta > 0.1) {
-                                        return (
-                                            <div className="flex items-center gap-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 px-3 py-1.5 rounded-lg text-xs" title={`Your fund's expense ratio (${data.expense_ratio}%) is ${delta.toFixed(2)}% higher than the category median (${peerMedian.toFixed(2)}%). This creates a continuous performance drag.`}>
-                                                <AlertTriangle className="w-4 h-4 text-rose-500" />
-                                                <span className="text-rose-700 dark:text-rose-400 font-medium">High Cost Drag Detected</span>
-                                            </div>
-                                        );
-                                    }
-                                    return null;
-                                })()}
+                                        if (delta > 0.1) {
+                                            return (
+                                                <div className="flex items-center gap-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 px-3 py-1.5 rounded-lg text-xs" title={`Your fund's expense ratio (${data.expense_ratio}%) is ${delta.toFixed(2)}% higher than the category median (${peerMedian.toFixed(2)}%). This creates a continuous performance drag.`}>
+                                                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+                                                    <span className="text-rose-700 dark:text-rose-400 font-medium">High Cost Drag Detected</span>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
+                                </div>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left text-sm">
@@ -608,13 +678,13 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                                         <tr>
                                             <th className="px-4 py-3 font-medium">Fund Name</th>
                                             {hasExpenseRatio && <th className="px-4 py-3 font-medium text-right cursor-help" title="Lower is better. A high expense ratio significantly reduces your net returns over time.">Expense %</th>}
-                                            {hasReturn3Y && <th className="px-4 py-3 font-medium text-right cursor-help" title="Higher is better. Computed equivalent annual growth rate over 3 years.">3Y Return</th>}
+                                            {hasReturn && <th className="px-4 py-3 font-medium text-right cursor-help" title={`Higher is better. Computed equivalent annual growth rate over ${peerPeriod.replace('y', ' years')}.`}>{peerPeriod.toUpperCase()} Return</th>}
                                             {hasStdDev && <th className="px-4 py-3 font-medium text-right cursor-help" title="Lower is better. Measures how much the fund's returns fluctuate.">Volatility</th>}
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                        {/* Sort peers by 3Y return descending */}
-                                        {data.peers.sort((a: any, b: any) => (b.cagr_3y || 0) - (a.cagr_3y || 0)).map((peer: any, i: number) => {
+                                        {/* Sort peers by selected return descending */}
+                                        {data.peers.sort((a: any, b: any) => (b[returnKey] || 0) - (a[returnKey] || 0)).map((peer: any, i: number) => {
                                             return (
                                                 <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                                                     <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
@@ -628,11 +698,11 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                                                             {peer.expense_ratio != null ? `${peer.expense_ratio.toFixed(2)}%` : '-'}
                                                         </td>
                                                     )}
-                                                    {hasReturn3Y && (
+                                                    {hasReturn && (
                                                         <td className="px-4 py-3 text-right font-mono font-medium text-slate-900 dark:text-slate-400 block sm:table-cell">
-                                                            {peer.cagr_3y != null ? (
-                                                                <span className={peer.cagr_3y > 0 ? "text-emerald-500" : peer.cagr_3y < 0 ? "text-rose-500" : ""}>
-                                                                    {peer.cagr_3y.toFixed(2)}%
+                                                            {peer[returnKey] != null ? (
+                                                                <span className={peer[returnKey] > 0 ? "text-emerald-500" : peer[returnKey] < 0 ? "text-rose-500" : ""}>
+                                                                    {peer[returnKey].toFixed(2)}%
                                                                 </span>
                                                             ) : '-'}
                                                         </td>
