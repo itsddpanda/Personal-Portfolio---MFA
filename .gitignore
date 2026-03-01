@@ -57,3 +57,6 @@ integration/*
 daas_inf209.json
 test_daas.py
 .gitignore
+
+# Local analysis folder that should not be copied into repo
+minime/
