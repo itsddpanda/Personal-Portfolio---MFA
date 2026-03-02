@@ -62,11 +62,11 @@ export default function HoldingsDrilldownPage() {
                                 // If the history does NOT include the current weighting at the very end, we should add it
                                 // so the sparkline plots the trend up to the current value.
                                 if (parsedHistory.length > 0 && h.weighting != null) {
-                                  // Quick heuristic: If the last item in history is exactly the same as current weight,
-                                  // it might already be included. If not, append it.
-                                  if (parsedHistory[parsedHistory.length - 1].weightage !== h.weighting) {
-                                      parsedHistory.push({ per: "Current", weightage: h.weighting });
-                                  }
+                                    // Quick heuristic: If the last item in history is exactly the same as current weight,
+                                    // it might already be included. If not, append it.
+                                    if (parsedHistory[parsedHistory.length - 1].weightage !== h.weighting) {
+                                        parsedHistory.push({ per: "Current", weightage: h.weighting });
+                                    }
                                 }
 
                                 // 1M ago is index 0 in `rev`, 2M ago is index 1, 3M ago is index 2.
@@ -208,7 +208,7 @@ export default function HoldingsDrilldownPage() {
 
     return (
         <div className="min-h-[calc(100vh-4rem)] bg-transparent p-6">
-            <div className="max-w-6xl mx-auto space-y-6">
+            <div className="max-w-7xl mx-auto space-y-6">
 
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -260,15 +260,16 @@ export default function HoldingsDrilldownPage() {
                                     <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors select-none text-right group border-l border-slate-200 dark:border-white/5" onClick={() => handleSort('change_1m')}>
                                         1M Change {getSortIcon('change_1m')}
                                     </th>
-                                    <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors select-none text-right group hidden sm:table-cell" onClick={() => handleSort('change_2m')}>
-                                        2M Change {getSortIcon('change_2m')}
-                                    </th>
-                                    <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors select-none text-right group hidden sm:table-cell" onClick={() => handleSort('change_3m')}>
-                                        3M Change {getSortIcon('change_3m')}
-                                    </th>
-                                    <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 select-none text-center bg-transparent border-l border-slate-200 dark:border-white/5 hidden md:table-cell">
-                                        3M Trend
-                                    </th>
+                                    {holdings.some(h => h.change_2m != null) && (
+                                        <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors select-none text-right group hidden sm:table-cell" onClick={() => handleSort('change_2m')}>
+                                            2M Change {getSortIcon('change_2m')}
+                                        </th>
+                                    )}
+                                    {holdings.some(h => h.change_3m != null) && (
+                                        <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors select-none text-right group hidden sm:table-cell" onClick={() => handleSort('change_3m')}>
+                                            3M Change {getSortIcon('change_3m')}
+                                        </th>
+                                    )}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
@@ -293,23 +294,24 @@ export default function HoldingsDrilldownPage() {
                                                 </span>
                                             ) : '-'}
                                         </td>
-                                        <td className="px-4 py-2 text-right font-mono hidden sm:table-cell">
-                                            {h.change_2m != null ? (
-                                                <span className={h.change_2m > 0 ? "text-emerald-500" : h.change_2m < 0 ? "text-rose-500" : "text-slate-500"}>
-                                                    {h.change_2m > 0 ? '+' : ''}{h.change_2m.toFixed(2)}%
-                                                </span>
-                                            ) : '-'}
-                                        </td>
-                                        <td className="px-4 py-2 text-right font-mono hidden sm:table-cell">
-                                            {h.change_3m != null ? (
-                                                <span className={h.change_3m > 0 ? "text-emerald-500" : h.change_3m < 0 ? "text-rose-500" : "text-slate-500"}>
-                                                    {h.change_3m > 0 ? '+' : ''}{h.change_3m.toFixed(2)}%
-                                                </span>
-                                            ) : '-'}
-                                        </td>
-                                        <td className="px-4 py-2 text-center border-l border-slate-100 dark:border-white/5 hidden md:table-cell">
-                                            {renderSparkline(h.history)}
-                                        </td>
+                                        {holdings.some(hh => hh.change_2m != null) && (
+                                            <td className="px-4 py-2 text-right font-mono hidden sm:table-cell">
+                                                {h.change_2m != null ? (
+                                                    <span className={h.change_2m > 0 ? "text-emerald-500" : h.change_2m < 0 ? "text-rose-500" : "text-slate-500"}>
+                                                        {h.change_2m > 0 ? '+' : ''}{h.change_2m.toFixed(2)}%
+                                                    </span>
+                                                ) : '-'}
+                                            </td>
+                                        )}
+                                        {holdings.some(hh => hh.change_3m != null) && (
+                                            <td className="px-4 py-2 text-right font-mono hidden sm:table-cell">
+                                                {h.change_3m != null ? (
+                                                    <span className={h.change_3m > 0 ? "text-emerald-500" : h.change_3m < 0 ? "text-rose-500" : "text-slate-500"}>
+                                                        {h.change_3m > 0 ? '+' : ''}{h.change_3m.toFixed(2)}%
+                                                    </span>
+                                                ) : '-'}
+                                            </td>
+                                        )}
                                     </tr>
                                 ))}
                             </tbody>

@@ -106,9 +106,9 @@ def fetch_fund_intelligence(isin: str) -> Optional[Dict[str, Any]]:
     Raises DaasProcessingException on 503 HTTP status.
     Raises DaasAuthException on 401/429 HTTP status.
     """
-    api_key = os.getenv("FUND_DAAS_API_KEY")
+    api_key = os.getenv("FUND_DAAS_API_KEY", "sk_test_123")
     if not api_key:
-        logger.error("FUND_DAAS_API_KEY environment variable is not set.")
+        logger.error("FUND_DAAS_API_KEY environment variable is not set and no fallback available.")
         raise DaasAuthException("API key not configured.")
 
     url = f"{DAAS_BASE_URL}/api/v1/fund/pro/{isin}"
