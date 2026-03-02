@@ -566,39 +566,50 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                                 )}
 
                                 {/* Market Cap Allocation */}
-                                {isEquityFund && (data.large_cap_wt != null || data.mid_cap_wt != null || data.small_cap_wt != null) && (
-                                    <div>
-                                        <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Market Cap</h4>
-                                        <div className="flex h-3 md:h-4 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
-                                            {data.large_cap_wt > 0 && <div style={{ width: `${data.large_cap_wt}%` }} className="bg-indigo-600" title={`Large Cap: ${data.large_cap_wt}%`} />}
-                                            {data.mid_cap_wt > 0 && <div style={{ width: `${data.mid_cap_wt}%` }} className="bg-indigo-400" title={`Mid Cap: ${data.mid_cap_wt}%`} />}
-                                            {data.small_cap_wt > 0 && <div style={{ width: `${data.small_cap_wt}%` }} className="bg-indigo-300" title={`Small Cap: ${data.small_cap_wt}%`} />}
-                                            {data.others_cap_wt > 0 && <div style={{ width: `${data.others_cap_wt}%` }} className="bg-slate-400" title={`Other/Unclassified: ${data.others_cap_wt}%`} />}
+                                {isEquityFund && (data.large_cap_wt != null || data.mid_cap_wt != null || data.small_cap_wt != null) && (() => {
+                                    const totalCap = (data.large_cap_wt || 0) + (data.mid_cap_wt || 0) + (data.small_cap_wt || 0) + (data.others_cap_wt || 0);
+                                    const scaleCap = totalCap > 0 ? 100 / totalCap : 1;
+                                    return (
+                                        <div>
+                                            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Market Cap</h4>
+                                            <div className="flex h-3 md:h-4 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+                                                {data.large_cap_wt > 0 && <div style={{ width: `${data.large_cap_wt * scaleCap}%` }} className="bg-indigo-600" title={`Large Cap: ${data.large_cap_wt}%`} />}
+                                                {data.mid_cap_wt > 0 && <div style={{ width: `${data.mid_cap_wt * scaleCap}%` }} className="bg-indigo-400" title={`Mid Cap: ${data.mid_cap_wt}%`} />}
+                                                {data.small_cap_wt > 0 && <div style={{ width: `${data.small_cap_wt * scaleCap}%` }} className="bg-indigo-300" title={`Small Cap: ${data.small_cap_wt}%`} />}
+                                                {data.others_cap_wt > 0 && <div style={{ width: `${data.others_cap_wt * scaleCap}%` }} className="bg-slate-400" title={`Other/Unclassified: ${data.others_cap_wt}%`} />}
+                                            </div>
+                                            <div className="flex flex-wrap gap-4 mt-2 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                                                {data.large_cap_wt > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-600" />Large: {data.large_cap_wt}%</span>}
+                                                {data.mid_cap_wt > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-400" />Mid: {data.mid_cap_wt}%</span>}
+                                                {data.small_cap_wt > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-300" />Small: {data.small_cap_wt}%</span>}
+                                            </div>
                                         </div>
-                                        <div className="flex flex-wrap gap-4 mt-2 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                                            {data.large_cap_wt > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-600" />Large: {data.large_cap_wt}%</span>}
-                                            {data.mid_cap_wt > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-400" />Mid: {data.mid_cap_wt}%</span>}
-                                            {data.small_cap_wt > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-300" />Small: {data.small_cap_wt}%</span>}
-                                        </div>
-                                    </div>
-                                )}
+                                    );
+                                })()}
 
                                 {/* Sector Distribution */}
-                                {data.holdings?.some((h: any) => h.sector && h.weighting) && (() => {
-                                    const sectorMap: Record<string, number> = {};
-                                    data.holdings.forEach((h: any) => {
-                                        if (h.sector && h.weighting) {
-                                            sectorMap[h.sector] = (sectorMap[h.sector] || 0) + h.weighting;
-                                        }
-                                    });
-                                    const totalSectorWeight = Object.values(sectorMap).reduce((a, b) => a + b, 0);
-                                    // Hack to handle anomalous FOF data where underlying holdings aggregate > 100%
-                                    const scale = totalSectorWeight > 100 ? 100 / totalSectorWeight : 1;
+                                {(data.sectors?.length > 0 || data.holdings?.some((h: any) => h.sector && h.weighting)) && (() => {
+                                    let topSectors: [string, number][] = [];
 
-                                    const topSectors = Object.entries(sectorMap)
-                                        .sort(([, a], [, b]) => b - a)
-                                        .slice(0, 5);
+                                    if (data.sectors && data.sectors.length > 0) {
+                                        topSectors = data.sectors
+                                            .sort((a: any, b: any) => (b.weighting || 0) - (a.weighting || 0))
+                                            .slice(0, 5)
+                                            .map((s: any) => [s.sector_name, s.weighting || 0]);
+                                    } else {
+                                        const sectorMap: Record<string, number> = {};
+                                        data.holdings.forEach((h: any) => {
+                                            if (h.sector && h.weighting) {
+                                                sectorMap[h.sector] = (sectorMap[h.sector] || 0) + h.weighting;
+                                            }
+                                        });
+                                        topSectors = Object.entries(sectorMap)
+                                            .sort(([, a], [, b]) => b - a)
+                                            .slice(0, 5);
+                                    }
 
+                                    const totalSectorWeight = topSectors.reduce((acc, [, weight]) => acc + weight, 0);
+                                    const scale = totalSectorWeight > 0 ? 100 / totalSectorWeight : 1;
                                     const colors = ["bg-indigo-600", "bg-sky-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500"];
 
                                     return (
@@ -606,14 +617,14 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                                             <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Top Sectors</h4>
                                             <div className="flex h-3 md:h-4 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
                                                 {topSectors.map(([sector, weight], idx) => (
-                                                    <div key={sector} style={{ width: `${(weight * scale)}%` }} className={colors[idx % colors.length]} title={`${sector}: ${(weight * scale).toFixed(2)}%`} />
+                                                    <div key={sector} style={{ width: `${(weight * scale)}%` }} className={colors[idx % colors.length]} title={`${sector}: ${weight.toFixed(2)}%`} />
                                                 ))}
                                             </div>
                                             <div className="flex flex-wrap gap-4 mt-2 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
                                                 {topSectors.map(([sector, weight], idx) => (
                                                     <span key={sector} className="flex items-center gap-1">
                                                         <span className={`w-2 h-2 rounded-full ${colors[idx % colors.length]}`} />
-                                                        {sector}: {(weight * scale).toFixed(2)}%
+                                                        {sector}: {weight.toFixed(2)}%
                                                     </span>
                                                 ))}
                                             </div>

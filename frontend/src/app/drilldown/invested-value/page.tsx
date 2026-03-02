@@ -54,7 +54,7 @@ export default function InvestedValueDrilldownPage() {
 
     return (
         <div className="min-h-[calc(100vh-4rem)] bg-transparent p-6">
-            <div className="max-w-5xl mx-auto space-y-6">
+            <div className="max-w-7xl mx-auto space-y-6">
 
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
