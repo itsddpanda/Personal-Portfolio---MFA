@@ -41,8 +41,40 @@ run_step() {
   fi
 }
 
+apply_schema_migrations() {
+  local db_path="/data/mfa.db"
+  local migration_file="/app/add_columns.sql"
+
+  [[ -f "$migration_file" ]] || fail "db_migration" "Missing migration file: $migration_file"
+
+  while IFS= read -r statement; do
+    statement="${statement%;}"
+    [[ -n "${statement//[[:space:]]/}" ]] || continue
+
+    local table_name
+    table_name="$(awk '{print tolower($3)}' <<<"$statement")"
+    local column_name
+    column_name="$(awk '{print tolower($6)}' <<<"$statement")"
+
+    if [[ -z "$table_name" || -z "$column_name" ]]; then
+      fail "db_migration" "Unable to parse migration statement: $statement"
+    fi
+
+    local column_exists
+    column_exists="$(sqlite3 "$db_path" "SELECT COUNT(1) FROM pragma_table_info('$table_name') WHERE lower(name)='$column_name';")"
+
+    if [[ "$column_exists" == "0" ]]; then
+      sqlite3 "$db_path" "${statement};"
+      log "INFO" "db_migration" "Applied migration: ${table_name}.${column_name}"
+    else
+      log "INFO" "db_migration" "Column already exists, skipping: ${table_name}.${column_name}"
+    fi
+  done < <(awk 'NF && $1 !~ /^--/' "$migration_file")
+}
+
 init_db() {
   /usr/local/bin/python -c "from app.db.engine import create_db_and_tables; create_db_and_tables()"
+  apply_schema_migrations
   sqlite3 /data/mfa.db "PRAGMA journal_mode=WAL;"
 }
 

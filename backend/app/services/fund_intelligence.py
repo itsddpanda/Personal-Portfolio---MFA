@@ -3,6 +3,7 @@ import json
 import logging
 import threading
 import time
+import fcntl
 import requests
 from datetime import datetime, date as dt_date
 from typing import Dict, Any, Optional, Sequence, List
@@ -27,7 +28,7 @@ DAAS_BASE_URL = "https://money-calc-gateway.ddpanda.workers.dev"
 MAX_BULK_PREFETCH_SIZE = 50
 
 _prefetch_lock = threading.Lock()
-_last_prefetch_started_at = 0.0
+_prefetch_coordination_file = os.getenv("PREFETCH_COORDINATION_FILE", "/tmp/fund_prefetch.lock")
 
 _isin_to_name_cache: Optional[Dict[str, str]] = None
 
@@ -176,7 +177,6 @@ def prefetch_fund_intelligence_batches(
     min_interval_seconds: float = 5.0,
 ) -> Dict[str, Any]:
     """Bulk prefetch helper for warmup jobs using comma-separated ISIN requests."""
-    global _last_prefetch_started_at
     if batch_size <= 0:
         raise ValueError("batch_size must be greater than 0")
     if batch_size > MAX_BULK_PREFETCH_SIZE:
@@ -187,17 +187,33 @@ def prefetch_fund_intelligence_batches(
     if not _prefetch_lock.acquire(blocking=False):
         raise RuntimeError("Prefetch warmup is already running.")
 
-    started = time.monotonic()
-    elapsed = started - _last_prefetch_started_at
-    if _last_prefetch_started_at > 0 and elapsed < min_interval_seconds:
-        _prefetch_lock.release()
-        raise RuntimeError(
-            f"Prefetch warmup is throttled. Retry after {round(min_interval_seconds - elapsed, 2)} seconds."
-        )
-
-    _last_prefetch_started_at = started
-
+    coord_fp = None
     try:
+        coordination_dir = os.path.dirname(_prefetch_coordination_file)
+        if coordination_dir:
+            os.makedirs(coordination_dir, exist_ok=True)
+        coord_fp = open(_prefetch_coordination_file, "a+", encoding="utf-8")
+        try:
+            fcntl.flock(coord_fp.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError("Prefetch warmup is already running.")
+
+        started = time.monotonic()
+        coord_fp.seek(0)
+        last_started_raw = coord_fp.read().strip()
+        last_started_at = float(last_started_raw) if last_started_raw else 0.0
+        elapsed = started - last_started_at
+        if last_started_at > 0 and elapsed < min_interval_seconds:
+            raise RuntimeError(
+                f"Prefetch warmup is throttled. Retry after {round(min_interval_seconds - elapsed, 2)} seconds."
+            )
+
+        coord_fp.seek(0)
+        coord_fp.truncate()
+        coord_fp.write(str(started))
+        coord_fp.flush()
+        os.fsync(coord_fp.fileno())
+
         batches = _chunked(validated_isins, batch_size)
         logger.info(
             "Starting ISIN prefetch warmup: total_isins=%s, batches=%s, batch_size=%s, throttle_seconds=%s",
@@ -251,6 +267,9 @@ def prefetch_fund_intelligence_batches(
             "batches": results,
         }
     finally:
+        if coord_fp is not None:
+            fcntl.flock(coord_fp.fileno(), fcntl.LOCK_UN)
+            coord_fp.close()
         _prefetch_lock.release()
 
 
