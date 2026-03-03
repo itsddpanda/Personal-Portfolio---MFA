@@ -11,7 +11,7 @@ build_frontend() {
 
 while true; do
     echo "============================================="
-    echo " Docker Management for MFA (Test Environment) "
+    echo " Docker Management for DEV (Test Environment) "
     echo "============================================="
     echo "1. Docker down (without data)"
     echo "2. Docker down (with data - destroys volumes)"
