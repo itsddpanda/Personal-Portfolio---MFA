@@ -23,7 +23,7 @@ interface NAVChartProps {
     onRefresh?: () => void;
 }
 
-type TimeRange = '1Y' | '3Y' | '5Y' | '7Y' | '10Y' | 'MAX';
+type TimeRange = '1M' | '6M' | '1Y' | '3Y' | '5Y' | '7Y' | '10Y' | 'MAX';
 
 export function NAVChart({ data, isLoading, onRefresh }: NAVChartProps) {
     const [range, setRange] = useState<TimeRange>('1Y');
@@ -38,6 +38,8 @@ export function NAVChart({ data, isLoading, onRefresh }: NAVChartProps) {
         const latestDate = new Date(latestDateStr);
 
         let cutoffDate = new Date(latestDate);
+        if (range === '1M') cutoffDate.setMonth(latestDate.getMonth() - 1);
+        if (range === '6M') cutoffDate.setMonth(latestDate.getMonth() - 6);
         if (range === '1Y') cutoffDate.setFullYear(latestDate.getFullYear() - 1);
         if (range === '3Y') cutoffDate.setFullYear(latestDate.getFullYear() - 3);
         if (range === '5Y') cutoffDate.setFullYear(latestDate.getFullYear() - 5);
@@ -68,13 +70,13 @@ export function NAVChart({ data, isLoading, onRefresh }: NAVChartProps) {
     }, [filteredData]);
 
     const availableRanges = useMemo(() => {
-        if (!data || data.length < 2) return ['1Y', '3Y', '5Y'] as TimeRange[];
+        if (!data || data.length < 2) return ['1M', '6M', '1Y', '3Y', '5Y'] as TimeRange[];
 
         const first = new Date(data[0].date);
         const last = new Date(data[data.length - 1].date);
         const totalYears = (last.getTime() - first.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
 
-        const base: TimeRange[] = ['1Y', '3Y', '5Y'];
+        const base: TimeRange[] = ['1M', '6M', '1Y', '3Y', '5Y'];
 
         // Show 7Y and 10Y if history is > 7 years
         if (totalYears >= 7) {
@@ -145,7 +147,7 @@ export function NAVChart({ data, isLoading, onRefresh }: NAVChartProps) {
 
     const formatXAxis = (tickItem: string) => {
         const d = new Date(tickItem);
-        return `${d.toLocaleString('default', { month: 'short' })} ${d.getFullYear().toString().slice(-2)}`;
+        return `${d.toLocaleString('default', { month: 'short' })} '${d.getFullYear().toString().slice(-2)}`;
     };
 
     const CustomTooltip = ({ active, payload, label }: any) => {

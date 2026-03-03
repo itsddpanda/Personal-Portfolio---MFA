@@ -139,7 +139,7 @@ export default function DashboardPage() {
     if (loading || (syncing && !data)) {
         return (
             <div className="min-h-screen">
-                <ProcessingOverlay phase={syncing ? 'SYNCING' : 'READING'} visible={true} detailText={syncProgress ? `${syncProgress} schemes loaded` : undefined} />
+                <ProcessingOverlay phase={syncing ? 'SYNCING' : 'READING'} visible={true} detailText={syncProgress && syncProgress !== '0/0' ? `${syncProgress} schemes loaded` : undefined} />
             </div>
         );
     }
@@ -166,7 +166,7 @@ export default function DashboardPage() {
 
                 {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white/90 dark:bg-slate-900/50 backdrop-blur-md p-5 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm dark:shadow-lg gap-4">
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Portfolio Dashboard <span className="text-sm font-mono font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-md ml-2 align-middle">v1.1</span></h1>
+                    <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Portfolio Dashboard <span className="text-sm font-mono font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-md ml-2 align-middle">v0.9.78</span></h1>
                     <div className="flex flex-wrap items-center gap-3">
                         {syncing ? (
                             <div className="flex items-center text-indigo-600 dark:text-indigo-400 text-sm font-medium bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-full border border-indigo-200 dark:border-indigo-500/20">
@@ -174,7 +174,7 @@ export default function DashboardPage() {
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>
-                                Syncing NAVs... {syncProgress ? `(${syncProgress})` : ''}
+                                Syncing NAVs... {syncProgress && syncProgress !== '0/0' ? `(${syncProgress})` : ''}
                             </div>
                         ) : (
                             <div className={`text-sm font-medium px-3 py-1.5 rounded-full border bg-slate-50 dark:bg-slate-950/50 ${isStale ? 'text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-500/20' : 'text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/5'}`}>

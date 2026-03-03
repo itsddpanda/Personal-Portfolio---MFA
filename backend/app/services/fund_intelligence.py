@@ -1,8 +1,12 @@
 import os
+import json
 import logging
+import threading
+import time
+import fcntl
 import requests
-from datetime import datetime
-from typing import Dict, Any, Optional
+from datetime import datetime, date as dt_date
+from typing import Dict, Any, Optional, Sequence, List
 
 from app.models.models import (
     FundEnrichment,
@@ -10,14 +14,21 @@ from app.models.models import (
     FundRiskMetrics,
     FundHolding,
     FundPeer,
+    FundManager,
+    FundSector,
     Scheme,
 )
 from sqlmodel import Session, select
 from app.services.validation_engine import run_validations
+from app.services.isin_validator import normalize_and_validate_isin, validate_isin_list
 
 logger = logging.getLogger(__name__)
 
 DAAS_BASE_URL = "https://money-calc-gateway.ddpanda.workers.dev"
+MAX_BULK_PREFETCH_SIZE = 50
+
+_prefetch_lock = threading.Lock()
+_prefetch_coordination_file = os.getenv("PREFETCH_COORDINATION_FILE", "/tmp/fund_prefetch.lock")
 
 _isin_to_name_cache: Optional[Dict[str, str]] = None
 
@@ -53,6 +64,36 @@ def _get_name_from_navall(isin: str) -> Optional[str]:
     return _isin_to_name_cache.get(isin)
 
 
+def _safe_float(val) -> Optional[float]:
+    """Safely convert a value to float, returning None on failure."""
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
+def _safe_int(val) -> Optional[int]:
+    """Safely convert a value to int, returning None on failure."""
+    if val is None:
+        return None
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return None
+
+
+def _safe_date(val) -> Optional[dt_date]:
+    """Safely parse a YYYY-MM-DD string to date, returning None on failure."""
+    if val is None:
+        return None
+    try:
+        return dt_date.fromisoformat(str(val)[:10])
+    except (ValueError, TypeError):
+        return None
+
+
 class DaasProcessingException(Exception):
     """Raised when the DaaS API returns 503 (background calculation in progress)."""
 
@@ -67,52 +108,169 @@ class DaasAuthException(Exception):
     pass
 
 
+def _fetch_daas_path(path_value: str) -> Optional[Dict[str, Any]]:
+    """Fetch intelligence payload from the remote DaaS API by path value."""
+    api_key = os.getenv("FUND_DAAS_API_KEY", "sk_test_123")
+    if not api_key:
+        logger.error("FUND_DAAS_API_KEY environment variable is not set and no fallback available.")
+        raise DaasAuthException("API key not configured.")
+
+    url = f"{DAAS_BASE_URL}/api/v1/fund/pro/{path_value}"
+    headers = {"Authorization": f"Bearer {api_key}"}
+
+    response = requests.get(url, headers=headers, timeout=15)
+
+    if response.status_code == 200:
+        return response.json()
+
+    if response.status_code == 503:
+        retry_after = int(response.headers.get("Retry-After", 60))
+        logger.info(
+            "DaaS returned 503 Processing for %s. Retry in %ss.",
+            path_value,
+            retry_after,
+        )
+        raise DaasProcessingException(retry_after=retry_after)
+
+    if response.status_code in (401, 429):
+        logger.error("DaaS Auth/Quota Error for %s: %s", path_value, response.text)
+        raise DaasAuthException("Invalid API key or quota exceeded.")
+
+    if response.status_code == 404:
+        logger.warning("Path %s not found in DaaS provider.", path_value)
+        return None
+
+    logger.error(
+        "DaaS API Error (%s) for %s: %s",
+        response.status_code,
+        path_value,
+        response.text,
+    )
+    return None
+
+
 def fetch_fund_intelligence(isin: str) -> Optional[Dict[str, Any]]:
     """
     Fetches raw fund intelligence data from the remote DaaS API.
     Raises DaasProcessingException on 503 HTTP status.
     Raises DaasAuthException on 401/429 HTTP status.
     """
-    api_key = os.getenv("FUND_DAAS_API_KEY")
-    if not api_key:
-        logger.error("FUND_DAAS_API_KEY environment variable is not set.")
-        raise DaasAuthException("API key not configured.")
-
-    url = f"{DAAS_BASE_URL}/api/v1/fund/pro/{isin}"
-    headers = {"Authorization": f"Bearer {api_key}"}
+    normalized_isin = normalize_and_validate_isin(isin)
 
     try:
-        logger.info(f"Fetching DaaS intelligence for ISIN: {isin}")
-        response = requests.get(url, headers=headers, timeout=15)
-
-        if response.status_code == 200:
-            return response.json()
-
-        elif response.status_code == 503:
-            # The calculation was triggered in the background
-            retry_after = int(response.headers.get("Retry-After", 60))
-            logger.info(
-                f"DaaS returned 503 Processing for ISIN {isin}. Retry in {retry_after}s."
-            )
-            raise DaasProcessingException(retry_after=retry_after)
-
-        elif response.status_code in (401, 429):
-            logger.error(f"DaaS Auth/Quota Error for ISIN {isin}: {response.text}")
-            raise DaasAuthException("Invalid API key or quota exceeded.")
-
-        elif response.status_code == 404:
-            logger.warning(f"ISIN {isin} not found in DaaS provider.")
-            return None
-
-        else:
-            logger.error(
-                f"DaaS API Error ({response.status_code}) for ISIN {isin}: {response.text}"
-            )
-            return None
+        logger.info("Fetching DaaS intelligence for ISIN: %s", normalized_isin)
+        return _fetch_daas_path(normalized_isin)
 
     except requests.exceptions.RequestException as e:
-        logger.error(f"Network error fetching DaaS intelligence for {isin}: {e}")
+        logger.error("Network error fetching DaaS intelligence for %s: %s", normalized_isin, e)
         return None
+
+
+def _chunked(items: Sequence[str], size: int) -> List[List[str]]:
+    return [list(items[i : i + size]) for i in range(0, len(items), size)]
+
+
+def prefetch_fund_intelligence_batches(
+    isins: Sequence[str],
+    batch_size: int = MAX_BULK_PREFETCH_SIZE,
+    throttle_seconds: float = 0.3,
+    min_interval_seconds: float = 5.0,
+) -> Dict[str, Any]:
+    """Bulk prefetch helper for warmup jobs using comma-separated ISIN requests."""
+    if batch_size <= 0:
+        raise ValueError("batch_size must be greater than 0")
+    if batch_size > MAX_BULK_PREFETCH_SIZE:
+        raise ValueError(f"batch_size cannot exceed {MAX_BULK_PREFETCH_SIZE}")
+
+    validated_isins = validate_isin_list(isins, max_items=MAX_BULK_PREFETCH_SIZE)
+
+    if not _prefetch_lock.acquire(blocking=False):
+        raise RuntimeError("Prefetch warmup is already running.")
+
+    coord_fp = None
+    try:
+        coordination_dir = os.path.dirname(_prefetch_coordination_file)
+        if coordination_dir:
+            os.makedirs(coordination_dir, exist_ok=True)
+        coord_fp = open(_prefetch_coordination_file, "a+", encoding="utf-8")
+        try:
+            fcntl.flock(coord_fp.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError("Prefetch warmup is already running.")
+
+        started = time.monotonic()
+        coord_fp.seek(0)
+        last_started_raw = coord_fp.read().strip()
+        last_started_at = float(last_started_raw) if last_started_raw else 0.0
+        elapsed = started - last_started_at
+        if last_started_at > 0 and elapsed < min_interval_seconds:
+            raise RuntimeError(
+                f"Prefetch warmup is throttled. Retry after {round(min_interval_seconds - elapsed, 2)} seconds."
+            )
+
+        coord_fp.seek(0)
+        coord_fp.truncate()
+        coord_fp.write(str(started))
+        coord_fp.flush()
+        os.fsync(coord_fp.fileno())
+
+        batches = _chunked(validated_isins, batch_size)
+        logger.info(
+            "Starting ISIN prefetch warmup: total_isins=%s, batches=%s, batch_size=%s, throttle_seconds=%s",
+            len(validated_isins),
+            len(batches),
+            batch_size,
+            throttle_seconds,
+        )
+
+        results = []
+        for idx, batch in enumerate(batches, start=1):
+            joined = ",".join(batch)
+            batch_start = time.monotonic()
+            status = "ok"
+            try:
+                payload = _fetch_daas_path(joined)
+            except DaasProcessingException:
+                status = "processing"
+                payload = None
+            except requests.exceptions.RequestException as exc:
+                logger.error("Network error during batch prefetch %s: %s", idx, exc)
+                status = "network_error"
+                payload = None
+
+            duration_ms = round((time.monotonic() - batch_start) * 1000, 2)
+            logger.info(
+                "Prefetch batch completed: batch=%s/%s, size=%s, status=%s, duration_ms=%s",
+                idx,
+                len(batches),
+                len(batch),
+                status,
+                duration_ms,
+            )
+            results.append(
+                {
+                    "batch": idx,
+                    "size": len(batch),
+                    "status": status,
+                    "duration_ms": duration_ms,
+                    "has_payload": payload is not None,
+                }
+            )
+
+            if idx < len(batches) and throttle_seconds > 0:
+                time.sleep(throttle_seconds)
+
+        return {
+            "mode": "bulk",
+            "total_isins": len(validated_isins),
+            "batch_size": batch_size,
+            "batches": results,
+        }
+    finally:
+        if coord_fp is not None:
+            fcntl.flock(coord_fp.fileno(), fcntl.LOCK_UN)
+            coord_fp.close()
+        _prefetch_lock.release()
 
 
 def parse_enrichment_response(
@@ -127,16 +285,99 @@ def parse_enrichment_response(
     Does NOT save to DB - just builds the object graph.
     """
 
-    # 1. Base Enrichment Record
+    # Parse calculated_at timestamp
+    calc_at = data.get("calculated_at")
+    calculated_at_dt = None
+    if calc_at:
+        try:
+            calculated_at_dt = datetime.fromisoformat(str(calc_at))
+        except (ValueError, TypeError):
+            calculated_at_dt = None
+
+    # 1. Base Enrichment Record — all flat fields from API
     enrichment = FundEnrichment(
         scheme_id=scheme_id,
         fund_name=data.get("fund_name", "Unknown Fund"),
         fetched_at=datetime.utcnow(),
-        expense_ratio=data.get("expense_ratio"),
-        equity_alloc=data.get("equity_alloc"),
-        debt_alloc=data.get("debt_alloc"),
-        cash_alloc=data.get("cash_alloc"),
-        other_alloc=data.get("other_alloc"),
+
+        # Identifiers
+        code=data.get("code"),
+        morningstar_id=data.get("morningstar_id"),
+
+        # Fund metadata
+        scheme_short_name=data.get("scheme_short_name"),
+        category=data.get("category"),
+        sub_category=data.get("sub_category"),
+        fund_type=data.get("fund_type"),
+        plan_name=data.get("plan_name"),
+        option_name=data.get("option_name"),
+        payout_freq=data.get("payout_freq"),
+        inception_date=_safe_date(data.get("inception_date")),
+        benchmark=data.get("benchmark"),
+        riskometer=data.get("riskometer"),
+        investment_style=data.get("investment_style"),
+        rating=data.get("rating"),
+        objective=data.get("objective"),
+        is_active=data.get("is_active"),
+
+        # NAV snapshot
+        latest_nav_api=_safe_float(data.get("latest_nav")),
+        nav_change=_safe_float(data.get("nav_change")),
+        nav_change_percent=_safe_float(data.get("nav_change_percent")),
+        nav_date=_safe_date(data.get("nav_date")),
+
+        # AUM & Cost
+        aum_cr=_safe_float(data.get("aum_cr")),
+        expense_ratio=_safe_float(data.get("expense_ratio")),
+        turnover_ratio=_safe_float(data.get("turnover_ratio")),
+        turnover_ratio_cat_avg=_safe_float(data.get("turnover_ratio_cat_avg")),
+        exit_load=data.get("exit_load"),
+        lockin_period=data.get("lockin_period"),
+
+        # Valuation Ratios
+        pe=_safe_float(data.get("pe")),
+        cat_avg_pe=_safe_float(data.get("cat_avg_pe")),
+        pb=_safe_float(data.get("pb")),
+        cat_avg_pb=_safe_float(data.get("cat_avg_pb")),
+        price_sale=_safe_float(data.get("price_sale")),
+        cat_avg_price_sale=_safe_float(data.get("cat_avg_price_sale")),
+        price_cash_flow=_safe_float(data.get("price_cash_flow")),
+        cat_avg_price_cash_flow=_safe_float(data.get("cat_avg_price_cash_flow")),
+        dividend_yield=_safe_float(data.get("dividend_yield")),
+        cat_avg_dividend_yield=_safe_float(data.get("cat_avg_dividend_yield")),
+        roe=_safe_float(data.get("roe")),
+        cat_avg_roe=_safe_float(data.get("cat_avg_roe")),
+
+        # Debt fund metrics
+        yield_to_maturity=_safe_float(data.get("yield_to_maturity")),
+        modified_duration=_safe_float(data.get("modified_duration")),
+        avg_eff_maturity=_safe_float(data.get("avg_eff_maturity")),
+        avg_credit_quality_name=data.get("avg_credit_quality_name"),
+
+        # Asset Allocation
+        equity_alloc=_safe_float(data.get("equity_alloc")),
+        debt_alloc=_safe_float(data.get("debt_alloc")),
+        cash_alloc=_safe_float(data.get("cash_alloc")),
+        other_alloc=_safe_float(data.get("other_alloc")),
+
+        # Cap-weight breakdown
+        large_cap_wt=_safe_float(data.get("large_cap_wt")),
+        mid_cap_wt=_safe_float(data.get("mid_cap_wt")),
+        small_cap_wt=_safe_float(data.get("small_cap_wt")),
+        others_cap_wt=_safe_float(data.get("others_cap_wt")),
+
+        # Concentration metrics
+        number_of_holdings=_safe_int(data.get("number_of_holdings")),
+        avg_market_cap_cr=_safe_float(data.get("avg_market_cap_cr")),
+        top_3_sectors_weight=_safe_float(data.get("top_3_sectors_weight")),
+        top_5_stocks_weight=_safe_float(data.get("top_5_stocks_weight")),
+        top_10_stocks_weight=_safe_float(data.get("top_10_stocks_weight")),
+
+        # KBYI insights (stored as JSON text)
+        kbyi=json.dumps(data.get("kbyi")) if data.get("kbyi") else None,
+
+        # API calculation timestamp
+        calculated_at=calculated_at_dt,
     )
 
     # 2. Performance
@@ -159,9 +400,48 @@ def parse_enrichment_response(
     if history and len(history) > 0:
         latest_hist = history[-1]
 
-        # Ignore cagr_metrics array as per user feedback (incorrect source)
-        # We will populate performance.returns_* from the risk_metrics["returns"] object instead
-        pass
+        # Parse CAGR metrics from cagr_metrics object
+        cagr_metrics = latest_hist.get("cagr_metrics") or {}
+        cagr_vals = cagr_metrics.get("cagr", {})
+        cagr_ranks = cagr_metrics.get("cagr_rank_in_cat", {})
+
+        enrichment.performance.quarterly_performance = (
+            json.dumps(latest_hist.get("quarterly_performance"))
+            if latest_hist.get("quarterly_performance") is not None
+            else None
+        )
+        enrichment.performance.best_periods = (
+            json.dumps(latest_hist.get("best_periods"))
+            if latest_hist.get("best_periods") is not None
+            else None
+        )
+        enrichment.performance.worst_periods = (
+            json.dumps(latest_hist.get("worst_periods"))
+            if latest_hist.get("worst_periods") is not None
+            else None
+        )
+        enrichment.performance.sip_returns = (
+            json.dumps(latest_hist.get("sip_returns"))
+            if latest_hist.get("sip_returns") is not None
+            else None
+        )
+        enrichment.performance.cagr_cat_avg = (
+            json.dumps(cagr_metrics.get("cagr_cat_avg"))
+            if cagr_metrics.get("cagr_cat_avg") is not None
+            else None
+        )
+
+        enrichment.performance.cagr_1y = _safe_float(cagr_vals.get("1 Year"))
+        enrichment.performance.cagr_3y = _safe_float(cagr_vals.get("3 Years"))
+        enrichment.performance.cagr_5y = _safe_float(cagr_vals.get("5 Years"))
+        enrichment.performance.cagr_10y = _safe_float(cagr_vals.get("10 Years"))
+
+        enrichment.performance.cagr_rank_1y = _safe_int(cagr_ranks.get("1 Year"))
+        enrichment.performance.cagr_rank_3y = _safe_int(cagr_ranks.get("3 Years"))
+        enrichment.performance.cagr_rank_5y = _safe_int(cagr_ranks.get("5 Years"))
+        enrichment.performance.cagr_rank_10y = _safe_int(cagr_ranks.get("10 Years"))
+
+        enrichment.performance.recorded_at = _safe_date(latest_hist.get("recorded_at"))
 
         # Parse Risk Metrics
         if latest_hist.get("risk_metrics"):
@@ -336,15 +616,41 @@ def parse_enrichment_response(
     for h in holdings_data:
         if not h or not isinstance(h, dict):
             continue
+        # Serialize holdings_history array to JSON text if present
+        hh = h.get("holdings_history")
+        hh_json = json.dumps(hh) if hh else None
+
         holdings_list.append(
             FundHolding(
                 stock_name=h.get("stock_name") or "Unknown Stock",
                 sector=h.get("sector"),
-                weighting=h.get("weighting"),
-                market_value=h.get("market_value"),
+                weighting=_safe_float(h.get("weighting")),
+                market_value=_safe_float(h.get("market_value")),
+                change_1m=_safe_float(h.get("change_1m")),
+                holdings_history=hh_json,
             )
         )
     enrichment.holdings = holdings_list
+
+    # 4.5. Sectors
+    sectors_data = data.get("fund_sectors", [])
+    if not isinstance(sectors_data, list):
+        sectors_data = []
+
+    sectors_list = []
+    for s in sectors_data:
+        if not s or not isinstance(s, dict):
+            continue
+
+        sectors_list.append(
+            FundSector(
+                sector_name=s.get("sector_name") or "Unknown Sector",
+                weighting=_safe_float(s.get("weighting")),
+                market_value=_safe_float(s.get("market_value")),
+                change_1m=_safe_float(s.get("change_1m")),
+            )
+        )
+    enrichment.sectors = sectors_list
 
     # 5. Peers
     peers_data = data.get("fund_peers", [])
@@ -379,14 +685,38 @@ def parse_enrichment_response(
             FundPeer(
                 fund_name=peer_name,
                 peer_isin=peer_isin,
-                return_3y=p.get("cagr_3y"),
-                # Expense and Std Dev aren't explicitly in the peer array according to the doc exactly,
-                # but we will extract from the flat if available per peer, otherwise None
-                expense_ratio=p.get("expense_ratio"),
-                std_deviation=p.get("std_deviation"),
+                cagr_1y=_safe_float(p.get("cagr_1y")),
+                cagr_3y=_safe_float(p.get("cagr_3y")),
+                cagr_5y=_safe_float(p.get("cagr_5y")),
+                cagr_10y=_safe_float(p.get("cagr_10y")),
+                yield_to_maturity=_safe_float(p.get("yield_to_maturity")),
+                modified_duration=_safe_float(p.get("modified_duration")),
+                avg_eff_maturity=_safe_float(p.get("avg_eff_maturity")),
+                expense_ratio=_safe_float(p.get("expense_ratio")),
+                portfolio_turnover=_safe_float(p.get("portfolio_turnover")),
+                std_deviation=_safe_float(p.get("std_deviation")),
             )
         )
     enrichment.peers = peers_list
+
+    # 6. Fund Managers (NEW)
+    managers_data = data.get("fund_managers", [])
+    if not isinstance(managers_data, list):
+        managers_data = []
+
+    managers_list = []
+    for m in managers_data:
+        if not m or not isinstance(m, dict):
+            continue
+        managers_list.append(
+            FundManager(
+                manager_name=m.get("manager_name") or "Unknown Manager",
+                role=m.get("role"),
+                start_date=_safe_date(m.get("start_date")),
+                end_date=_safe_date(m.get("end_date")),
+            )
+        )
+    enrichment.managers = managers_list
 
     # Run Data Validation Engine (in-memory update)
     enrichment_nav = data.get("latest_nav")

@@ -128,7 +128,7 @@ export default function SchemeDetailsPage() {
     if (error || !data) {
         return (
             <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-                <Button variant="outline" onClick={() => router.back()} className="mb-6 rounded-full px-6 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white">
+                <Button variant="outline" onClick={() => router.push('/dashboard')} className="mb-6 rounded-full px-6 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white">
                     &larr; Return to Dashboard
                 </Button>
                 <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-2xl p-8 shadow-sm">
@@ -148,7 +148,7 @@ export default function SchemeDetailsPage() {
     return (
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 bg-transparent">
             <button
-                onClick={() => router.back()}
+                onClick={() => router.push('/dashboard')}
                 className="group flex items-center text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 mb-8 transition-colors"
             >
                 <span className="mr-2 transform group-hover:-translate-x-1 transition-transform text-indigo-600 dark:text-indigo-500">&larr;</span>

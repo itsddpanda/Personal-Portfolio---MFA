@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from 'react';
+import Link from 'next/link';
 import { getSchemeEnrichment, RetryableError } from '@/lib/api';
 
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
-import { Sparkles, RefreshCcw, AlertTriangle, Clock, Info } from 'lucide-react';
+import { Sparkles, RefreshCcw, AlertTriangle, Clock, Info, CheckCircle2, TrendingUp, TrendingDown, ShieldCheck, Users, Briefcase, ChevronRight, Activity } from 'lucide-react';
 
 export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
     const [data, setData] = useState<any | null>(null);
@@ -14,7 +15,9 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
     const [polling, setPolling] = useState(false);
     const [countdown, setCountdown] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [period, setPeriod] = useState<"1y" | "3y" | "5y">("3y");
+    const [period, setPeriod] = useState<"1y" | "3y" | "5y">("1y");
+    const [peerView, setPeerView] = useState<"performance" | "risk" | "fundamentals">("performance");
+    const [holdingsView, setHoldingsView] = useState<"heaviest" | "increased" | "decreased">("heaviest");
     const toast = useToast();
 
     const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -164,9 +167,26 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
         if (validation_status === 2) {
             return <span title="Minor data discrepancy (e.g., NAV difference ≤ 5% or data freshness > 30 days) compared to official records. Core analysis remains sound." className="cursor-help inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Minor Variance</span>;
         }
-        // Assuming 3 is failure
-        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800"><span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Unverified Data</span>;
+        if (validation_status === 3) {
+            return <span title="Significant data discrepancy detected. NAV or fund name does not match official records." className="cursor-help inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800"><span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Unverified Data</span>;
+        }
+        // Status 0 = Unvalidated (not enough data for cross-validation)
+        return <span title="Validation checks could not run — awaiting cross-reference data." className="cursor-help inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800/50 dark:text-slate-400 border border-slate-200 dark:border-slate-700"><span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Pending Validation</span>;
     };
+
+    // Parse KBYI Insights
+    let insights: any[] = [];
+    if (data?.kbyi) {
+        try {
+            insights = JSON.parse(data.kbyi);
+        } catch (e) {
+            console.error("Failed to parse kbyi insights", e);
+        }
+    }
+
+    // Determine primary asset class
+    const isDebtFund = data?.debt_alloc > 50 || data?.yield_to_maturity != null;
+    const isEquityFund = data?.equity_alloc > 50 || data?.pe != null;
 
     return (
         <div className="mb-10 space-y-6">
@@ -184,6 +204,120 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                 </div>
                 {renderValidationBadge()}
             </div>
+
+            {/* Fund Overview Strip */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">AUM (Cr)</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100 font-mono">
+                        {data.aum_cr != null ? `₹${data.aum_cr.toLocaleString('en-IN')}` : '-'}
+                    </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Expense Ratio</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100 font-mono">
+                        {data.expense_ratio != null ? `${data.expense_ratio}%` : '-'}
+                    </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Inception</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100 font-mono">
+                        {data.inception_date ? new Date(data.inception_date).toLocaleDateString() : '-'}
+                    </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Benchmark</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100 text-xs truncate" title={data.benchmark || '-'}>
+                        {data.benchmark || '-'}
+                    </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-1">Riskometer</p>
+                    {(() => {
+                        const risk = data.riskometer || "";
+                        let color = "text-slate-900 dark:text-slate-100";
+                        if (risk.toLowerCase().includes("low to moderate")) color = "text-emerald-500 dark:text-emerald-400";
+                        else if (risk.toLowerCase().includes("low")) color = "text-emerald-600 dark:text-emerald-500";
+                        else if (risk.toLowerCase().includes("moderately high")) color = "text-orange-500 dark:text-orange-400";
+                        else if (risk.toLowerCase().includes("very high")) color = "text-rose-600 dark:text-rose-500";
+                        else if (risk.toLowerCase().includes("high")) color = "text-rose-500 dark:text-rose-400";
+                        else if (risk.toLowerCase().includes("moderate")) color = "text-amber-500 dark:text-amber-400";
+
+                        return (
+                            <p className={`font-semibold text-xs ${color}`}>
+                                {risk || '-'}
+                            </p>
+                        );
+                    })()}
+                </div>
+            </div>
+
+            {/* AI Insights (KBYI) */}
+            {insights.length > 0 && insights.some(i => i[Object.keys(i)[0]]?.text) && (
+                <div className="bg-gradient-to-br from-indigo-50/50 to-white dark:from-indigo-950/20 dark:to-slate-900 border border-indigo-100 dark:border-indigo-500/10 rounded-2xl p-6 shadow-sm">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Sparkles className="w-5 h-5 text-indigo-500" />
+                        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-200">Key Highlights</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {insights.map((insight, idx) => {
+                            const key = Object.keys(insight)[0];
+                            const content = insight[key];
+
+                            if (!content || !content.text) return null;
+
+                            // Clean up trailing "across ." artifacts from API Generation
+                            let rawText = content.text as string;
+                            rawText = rawText.replace(/across\s+\.$/, ".");
+
+                            // Intelligently replace {{template}} string tags with actual values or strip brackets
+                            rawText = rawText.replace(/\{\{(.*?)\}\}/g, (match, p1) => {
+                                const lowerP1 = p1.toLowerCase();
+                                if (lowerP1.includes('expense ratio') && data.expense_ratio != null) {
+                                    return `${p1} (${data.expense_ratio}%)`;
+                                }
+                                if (lowerP1.includes('turnover') && data.turnover_ratio != null) {
+                                    return `${p1} (${data.turnover_ratio}%)`;
+                                }
+                                if ((lowerP1.includes('aum') || lowerP1.includes('size')) && data.aum_cr != null) {
+                                    return `${p1} (₹${data.aum_cr.toLocaleString('en-IN')} Cr)`;
+                                }
+                                return p1; // Fallback: just strip the brackets
+                            });
+
+                            // Determine icon based on key type
+                            let Icon = Info;
+                            let iconColor = "text-slate-400";
+                            let bgColor = "bg-slate-100 dark:bg-slate-800";
+
+                            if (key.toLowerCase().includes('performer') || key.toLowerCase().includes('return')) {
+                                Icon = TrendingUp;
+                                iconColor = "text-emerald-500";
+                                bgColor = "bg-emerald-100 dark:bg-emerald-900/30";
+                            } else if (key.toLowerCase().includes('cost') || key.toLowerCase().includes('expense')) {
+                                Icon = ShieldCheck;
+                                iconColor = "text-sky-500";
+                                bgColor = "bg-sky-100 dark:bg-sky-900/30";
+                            } else if (key.toLowerCase().includes('volatility') || key.toLowerCase().includes('risk')) {
+                                Icon = Activity;
+                                iconColor = "text-amber-500";
+                                bgColor = "bg-amber-100 dark:bg-amber-900/30";
+                            }
+
+                            return (
+                                <div key={idx} className="flex gap-3 items-start bg-white dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700/50">
+                                    <div className={`p-2 rounded-lg ${bgColor} shrink-0`}>
+                                        <Icon className={`w-4 h-4 ${iconColor}`} />
+                                    </div>
+                                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                                        {rawText}
+                                    </p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
@@ -323,6 +457,74 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                     </div>
                 )}
 
+                {/* Valuations & Fundamentals */}
+                {((isEquityFund && (data.pe != null || data.pb != null)) || (isDebtFund && (data.yield_to_maturity != null || data.modified_duration != null))) && (
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 rounded-2xl shadow-sm dark:shadow-xl p-6 transition-all hover:shadow-md dark:hover:bg-slate-900/80 flex flex-col">
+                        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-200 mb-6">
+                            {isEquityFund ? "Valuation & Fundamentals" : "Debt Characteristics"}
+                        </h3>
+                        <div className="grid grid-cols-2 gap-4">
+                            {isEquityFund ? (
+                                <>
+                                    {data.pe != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">P/E Ratio</p>
+                                            <p className="text-lg font-bold font-mono text-slate-700 dark:text-slate-300">{data.pe.toFixed(2)}</p>
+                                            {data.cat_avg_pe != null && <p className="text-[10px] text-slate-400 mt-1 font-mono">Cat Avg: {data.cat_avg_pe.toFixed(2)}</p>}
+                                        </div>
+                                    )}
+                                    {data.pb != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">P/B Ratio</p>
+                                            <p className="text-lg font-bold font-mono text-slate-700 dark:text-slate-300">{data.pb.toFixed(2)}</p>
+                                            {data.cat_avg_pb != null && <p className="text-[10px] text-slate-400 mt-1 font-mono">Cat Avg: {data.cat_avg_pb.toFixed(2)}</p>}
+                                        </div>
+                                    )}
+                                    {data.dividend_yield != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">Div. Yield</p>
+                                            <p className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400">{data.dividend_yield.toFixed(2)}%</p>
+                                        </div>
+                                    )}
+                                    {data.turnover_ratio != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">Turnover</p>
+                                            <p className="text-lg font-bold font-mono text-slate-700 dark:text-slate-300">{data.turnover_ratio.toFixed(2)}%</p>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    {data.yield_to_maturity != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">YTM</p>
+                                            <p className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400">{data.yield_to_maturity.toFixed(2)}%</p>
+                                        </div>
+                                    )}
+                                    {data.modified_duration != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">Mod. Duration</p>
+                                            <p className="text-lg font-bold font-mono text-slate-700 dark:text-slate-300">{data.modified_duration.toFixed(2)} yrs</p>
+                                        </div>
+                                    )}
+                                    {data.avg_eff_maturity != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">Avg Maturity</p>
+                                            <p className="text-lg font-bold font-mono text-slate-700 dark:text-slate-300">{data.avg_eff_maturity.toFixed(2)} yrs</p>
+                                        </div>
+                                    )}
+                                    {data.avg_credit_quality_name != null && (
+                                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs text-slate-500 font-medium tracking-wide mb-1">Credit Qual.</p>
+                                            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{data.avg_credit_quality_name}</p>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* Portfolio Composition (Holdings & Allocation) */}
                 {(data.holdings?.length > 0 || data.equity_alloc != null) && (
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 rounded-2xl shadow-sm dark:shadow-xl overflow-hidden flex flex-col transition-all hover:shadow-md dark:hover:bg-slate-900/80">
@@ -343,45 +545,156 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                         </div>
 
                         <div className="p-6 flex flex-col gap-6">
-                            {/* Asset Allocation Bar */}
-                            {(data.equity_alloc != null || data.debt_alloc != null || data.cash_alloc != null) && (
-                                <div>
-                                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Asset Allocation</h4>
-                                    <div className="flex h-3 md:h-4 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
-                                        {data.equity_alloc > 0 && <div style={{ width: `${data.equity_alloc}%` }} className="bg-indigo-500" title={`Equity: ${data.equity_alloc}%`} />}
-                                        {data.debt_alloc > 0 && <div style={{ width: `${data.debt_alloc}%` }} className="bg-sky-500" title={`Debt: ${data.debt_alloc}%`} />}
-                                        {data.cash_alloc > 0 && <div style={{ width: `${data.cash_alloc}%` }} className="bg-emerald-500" title={`Cash: ${data.cash_alloc}%`} />}
-                                        {data.other_alloc > 0 && <div style={{ width: `${data.other_alloc}%` }} className="bg-amber-500" title={`Other: ${data.other_alloc}%`} />}
+                            {/* Asset Allocation & Market Cap Bar */}
+                            <div className="space-y-5">
+                                {(data.equity_alloc != null || data.debt_alloc != null || data.cash_alloc != null) && (
+                                    <div>
+                                        <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Asset Allocation</h4>
+                                        <div className="flex h-3 md:h-4 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+                                            {data.equity_alloc > 0 && <div style={{ width: `${data.equity_alloc}%` }} className="bg-indigo-500" title={`Equity: ${data.equity_alloc}%`} />}
+                                            {data.debt_alloc > 0 && <div style={{ width: `${data.debt_alloc}%` }} className="bg-sky-500" title={`Debt: ${data.debt_alloc}%`} />}
+                                            {data.cash_alloc > 0 && <div style={{ width: `${data.cash_alloc}%` }} className="bg-emerald-500" title={`Cash: ${data.cash_alloc}%`} />}
+                                            {data.other_alloc > 0 && <div style={{ width: `${data.other_alloc}%` }} className="bg-amber-500" title={`Other: ${data.other_alloc}%`} />}
+                                        </div>
+                                        <div className="flex gap-4 mt-2 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                                            {data.equity_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-500" />Equity: {data.equity_alloc}%</span>}
+                                            {data.debt_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-sky-500" />Debt: {data.debt_alloc}%</span>}
+                                            {data.cash_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" />Cash: {data.cash_alloc}%</span>}
+                                            {data.other_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Other: {data.other_alloc}%</span>}
+                                        </div>
                                     </div>
-                                    <div className="flex gap-4 mt-2 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                                        {data.equity_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-500" />Equity: {data.equity_alloc}%</span>}
-                                        {data.debt_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-sky-500" />Debt: {data.debt_alloc}%</span>}
-                                        {data.cash_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" />Cash: {data.cash_alloc}%</span>}
-                                        {data.other_alloc > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />Other: {data.other_alloc}%</span>}
-                                    </div>
-                                </div>
-                            )}
+                                )}
+
+                                {/* Market Cap Allocation */}
+                                {isEquityFund && (data.large_cap_wt != null || data.mid_cap_wt != null || data.small_cap_wt != null) && (() => {
+                                    const totalCap = (data.large_cap_wt || 0) + (data.mid_cap_wt || 0) + (data.small_cap_wt || 0) + (data.others_cap_wt || 0);
+                                    const scaleCap = totalCap > 0 ? 100 / totalCap : 1;
+                                    return (
+                                        <div>
+                                            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Market Cap</h4>
+                                            <div className="flex h-3 md:h-4 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+                                                {data.large_cap_wt > 0 && <div style={{ width: `${data.large_cap_wt * scaleCap}%` }} className="bg-indigo-600" title={`Large Cap: ${data.large_cap_wt}%`} />}
+                                                {data.mid_cap_wt > 0 && <div style={{ width: `${data.mid_cap_wt * scaleCap}%` }} className="bg-indigo-400" title={`Mid Cap: ${data.mid_cap_wt}%`} />}
+                                                {data.small_cap_wt > 0 && <div style={{ width: `${data.small_cap_wt * scaleCap}%` }} className="bg-indigo-300" title={`Small Cap: ${data.small_cap_wt}%`} />}
+                                                {data.others_cap_wt > 0 && <div style={{ width: `${data.others_cap_wt * scaleCap}%` }} className="bg-slate-400" title={`Other/Unclassified: ${data.others_cap_wt}%`} />}
+                                            </div>
+                                            <div className="flex flex-wrap gap-4 mt-2 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                                                {data.large_cap_wt > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-600" />Large: {data.large_cap_wt}%</span>}
+                                                {data.mid_cap_wt > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-400" />Mid: {data.mid_cap_wt}%</span>}
+                                                {data.small_cap_wt > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-300" />Small: {data.small_cap_wt}%</span>}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Sector Distribution */}
+                                {(data.sectors?.length > 0 || data.holdings?.some((h: any) => h.sector && h.weighting)) && (() => {
+                                    let topSectors: [string, number][] = [];
+
+                                    if (data.sectors && data.sectors.length > 0) {
+                                        topSectors = data.sectors
+                                            .sort((a: any, b: any) => (b.weighting || 0) - (a.weighting || 0))
+                                            .slice(0, 5)
+                                            .map((s: any) => [s.sector_name, s.weighting || 0]);
+                                    } else {
+                                        const sectorMap: Record<string, number> = {};
+                                        data.holdings.forEach((h: any) => {
+                                            if (h.sector && h.weighting) {
+                                                sectorMap[h.sector] = (sectorMap[h.sector] || 0) + h.weighting;
+                                            }
+                                        });
+                                        topSectors = Object.entries(sectorMap)
+                                            .sort(([, a], [, b]) => b - a)
+                                            .slice(0, 5);
+                                    }
+
+                                    const totalSectorWeight = topSectors.reduce((acc, [, weight]) => acc + weight, 0);
+                                    const scale = totalSectorWeight > 0 ? 100 / totalSectorWeight : 1;
+                                    const colors = ["bg-indigo-600", "bg-sky-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500"];
+
+                                    return (
+                                        <div>
+                                            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Top Sectors</h4>
+                                            <div className="flex h-3 md:h-4 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+                                                {topSectors.map(([sector, weight], idx) => (
+                                                    <div key={sector} style={{ width: `${(weight * scale)}%` }} className={colors[idx % colors.length]} title={`${sector}: ${weight.toFixed(2)}%`} />
+                                                ))}
+                                            </div>
+                                            <div className="flex flex-wrap gap-4 mt-2 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                                                {topSectors.map(([sector, weight], idx) => (
+                                                    <span key={sector} className="flex items-center gap-1">
+                                                        <span className={`w-2 h-2 rounded-full ${colors[idx % colors.length]}`} />
+                                                        {sector}: {weight.toFixed(2)}%
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
 
                             {/* Top Holdings */}
-                            {data.holdings?.length > 0 && (
-                                <div>
-                                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Top Holdings</h4>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left text-sm">
-                                            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                                {data.holdings.slice(0, 5).map((h: any, i: number) => (
-                                                    <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                                        <td className="py-2 text-slate-700 dark:text-slate-300 truncate max-w-[150px]">{h.stock_name}</td>
-                                                        <td className="py-2 text-right font-mono font-medium text-slate-900 dark:text-slate-400">
-                                                            {h.weighting ? `${h.weighting.toFixed(2)}%` : '-'}
-                                                        </td>
-                                                    </tr>
+                            {data.holdings?.length > 0 && (() => {
+                                const validHoldings = data.holdings.filter((h: any) => h.weighting != null);
+                                let displayedHoldings = [...validHoldings];
+
+                                if (holdingsView === 'heaviest') {
+                                    displayedHoldings.sort((a, b) => (b.weighting || 0) - (a.weighting || 0));
+                                } else if (holdingsView === 'increased') {
+                                    displayedHoldings = displayedHoldings.filter(h => h.change_1m > 0).sort((a, b) => b.change_1m - a.change_1m);
+                                } else if (holdingsView === 'decreased') {
+                                    displayedHoldings = displayedHoldings.filter(h => h.change_1m < 0).sort((a, b) => a.change_1m - b.change_1m);
+                                }
+
+                                displayedHoldings = displayedHoldings.slice(0, 5);
+
+                                return (
+                                    <div className="mt-6">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                                            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Top Holdings</h4>
+                                            <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 shrink-0 self-start sm:self-auto">
+                                                {(["heaviest", "increased", "decreased"] as const).map(v => (
+                                                    <button
+                                                        key={v}
+                                                        onClick={() => setHoldingsView(v)}
+                                                        className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${holdingsView === v ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                                    >
+                                                        {v === 'heaviest' ? 'HEAVIEST' : v === 'increased' ? 'INCREASED' : 'DECREASED'}
+                                                    </button>
                                                 ))}
-                                            </tbody>
-                                        </table>
+                                            </div>
+                                        </div>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left text-sm">
+                                                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                                                    {displayedHoldings.length === 0 ? (
+                                                        <tr><td colSpan={3} className="py-4 text-center text-slate-500 text-xs italic">No holdings found for this view.</td></tr>
+                                                    ) : displayedHoldings.map((h: any, i: number) => (
+                                                        <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                                                            <td className="py-2 text-slate-700 dark:text-slate-300 truncate max-w-[150px]">{h.stock_name}</td>
+                                                            <td className="py-2 pr-2 text-right font-mono font-medium text-slate-900 dark:text-slate-400 w-[60px]">
+                                                                {h.weighting ? `${h.weighting.toFixed(2)}%` : '-'}
+                                                            </td>
+                                                            {(holdingsView === 'increased' || holdingsView === 'decreased') && (
+                                                                <td className="py-2 text-right font-mono text-xs w-[60px]">
+                                                                    <span className={h.change_1m > 0 ? "text-emerald-500" : h.change_1m < 0 ? "text-rose-500" : "text-slate-400"}>
+                                                                        {h.change_1m > 0 ? '+' : ''}{h.change_1m.toFixed(2)}%
+                                                                    </span>
+                                                                </td>
+                                                            )}
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/5 text-center sm:text-right">
+                                            <Link href={`/drilldown/holdings/${amfiCode}`} className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 uppercase tracking-widest inline-flex items-center gap-1 transition-colors">
+                                                Explore All Holdings <ChevronRight className="w-3 h-3" />
+                                            </Link>
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                );
+                            })()}
                         </div>
                     </div>
                 )}
@@ -389,47 +702,81 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                 {data.peers?.length > 0 && (() => {
                     const validPeers = data.peers.filter((p: any) => p.expense_ratio != null);
                     const hasExpenseRatio = data.peers.some((p: any) => p.expense_ratio != null);
-                    const hasReturn3Y = data.peers.some((p: any) => p.return_3y != null);
-                    const hasStdDev = data.peers.some((p: any) => p.std_deviation != null);
+                    const hasDebtMetrics = data.peers.some((p: any) => p.yield_to_maturity != null || p.modified_duration != null);
+                    const hasTurnover = data.peers.some((p: any) => p.portfolio_turnover != null);
+
+                    // Always sort peers by 1Y/3Y/5Y return
+                    const sortedPeers = [...data.peers].sort((a: any, b: any) => {
+                        const valA = a.cagr_1y ?? a.cagr_3y ?? a.cagr_5y ?? 0;
+                        const valB = b.cagr_1y ?? b.cagr_3y ?? b.cagr_5y ?? 0;
+                        return valB - valA;
+                    });
 
                     return (
                         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 rounded-2xl shadow-sm dark:shadow-xl overflow-hidden flex flex-col transition-all hover:shadow-md dark:hover:bg-slate-900/80">
                             <div className="p-6 pb-4 border-b border-slate-100 dark:border-white/5 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                                 <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-200">Category Peers Comparison</h3>
-                                {/* Cost Drag Badge */}
-                                {(() => {
-                                    if (data.expense_ratio == null || validPeers.length === 0) return null;
+                                <div className="flex items-center gap-4 flex-wrap">
+                                    <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 shrink-0 overflow-x-auto overflow-y-hidden max-w-[100vw]">
+                                        <button onClick={() => setPeerView('performance')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${peerView === 'performance' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>PERFORMANCE</button>
+                                        <button onClick={() => setPeerView('risk')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${peerView === 'risk' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>RISK & COST</button>
+                                        {hasDebtMetrics && (
+                                            <button onClick={() => setPeerView('fundamentals')} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${peerView === 'fundamentals' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>DEBT METRICS</button>
+                                        )}
+                                    </div>
+                                    {/* Cost Drag Badge */}
+                                    {(() => {
+                                        if (data.expense_ratio == null || validPeers.length === 0) return null;
 
-                                    const peerMedian = [...validPeers]
-                                        .sort((a: any, b: any) => a.expense_ratio - b.expense_ratio)
-                                    [Math.floor(validPeers.length / 2)].expense_ratio;
+                                        const peerMedian = [...validPeers]
+                                            .sort((a: any, b: any) => a.expense_ratio - b.expense_ratio)
+                                        [Math.floor(validPeers.length / 2)].expense_ratio;
 
-                                    const delta = data.expense_ratio - peerMedian;
+                                        const delta = data.expense_ratio - peerMedian;
 
-                                    if (delta > 0.1) {
-                                        return (
-                                            <div className="flex items-center gap-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 px-3 py-1.5 rounded-lg text-xs" title={`Your fund's expense ratio (${data.expense_ratio}%) is ${delta.toFixed(2)}% higher than the category median (${peerMedian.toFixed(2)}%). This creates a continuous performance drag.`}>
-                                                <AlertTriangle className="w-4 h-4 text-rose-500" />
-                                                <span className="text-rose-700 dark:text-rose-400 font-medium">High Cost Drag Detected</span>
-                                            </div>
-                                        );
-                                    }
-                                    return null;
-                                })()}
+                                        if (delta > 0.1) {
+                                            return (
+                                                <div className="flex items-center gap-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 px-3 py-1.5 rounded-lg text-xs" title={`Your fund's expense ratio (${data.expense_ratio}%) is ${delta.toFixed(2)}% higher than the category median (${peerMedian.toFixed(2)}%). This creates a continuous performance drag.`}>
+                                                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+                                                    <span className="text-rose-700 dark:text-rose-400 font-medium">High Cost Drag Detected</span>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
+                                </div>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left text-sm">
                                     <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider">
                                         <tr>
-                                            <th className="px-4 py-3 font-medium">Fund Name</th>
-                                            {hasExpenseRatio && <th className="px-4 py-3 font-medium text-right cursor-help" title="Lower is better. A high expense ratio significantly reduces your net returns over time.">Expense %</th>}
-                                            {hasReturn3Y && <th className="px-4 py-3 font-medium text-right cursor-help" title="Higher is better. Computed equivalent annual growth rate over 3 years.">3Y Return</th>}
-                                            {hasStdDev && <th className="px-4 py-3 font-medium text-right cursor-help" title="Lower is better. Measures how much the fund's returns fluctuate.">Volatility</th>}
+                                            <th className="px-4 py-3 font-medium min-w-[150px]">Fund Name</th>
+                                            {peerView === 'performance' && (
+                                                <>
+                                                    <th className="px-4 py-3 font-medium text-right whitespace-nowrap">1Y Ret</th>
+                                                    <th className="px-4 py-3 font-medium text-right whitespace-nowrap">3Y Ret</th>
+                                                    <th className="px-4 py-3 font-medium text-right whitespace-nowrap">5Y Ret</th>
+                                                    <th className="px-4 py-3 font-medium text-right whitespace-nowrap">10Y Ret</th>
+                                                </>
+                                            )}
+                                            {peerView === 'risk' && (
+                                                <>
+                                                    {hasExpenseRatio && <th className="px-4 py-3 font-medium text-right whitespace-nowrap">Expense %</th>}
+                                                    <th className="px-4 py-3 font-medium text-right whitespace-nowrap">Volatility</th>
+                                                    {hasTurnover && <th className="px-4 py-3 font-medium text-right whitespace-nowrap">Turnover %</th>}
+                                                </>
+                                            )}
+                                            {peerView === 'fundamentals' && hasDebtMetrics && (
+                                                <>
+                                                    <th className="px-4 py-3 font-medium text-right whitespace-nowrap">YTM</th>
+                                                    <th className="px-4 py-3 font-medium text-right whitespace-nowrap">Mod Duration</th>
+                                                    <th className="px-4 py-3 font-medium text-right whitespace-nowrap">Avg Maturity</th>
+                                                </>
+                                            )}
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                        {/* Sort peers by 3Y return descending */}
-                                        {data.peers.sort((a: any, b: any) => (b.return_3y || 0) - (a.return_3y || 0)).map((peer: any, i: number) => {
+                                        {sortedPeers.map((peer: any, i: number) => {
                                             return (
                                                 <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                                                     <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
@@ -438,24 +785,51 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                                                             <div className="text-[10px] text-slate-400 font-mono mt-0.5" title="Peer ISIN">ISIN: {peer.peer_isin}</div>
                                                         )}
                                                     </td>
-                                                    {hasExpenseRatio && (
-                                                        <td className="px-4 py-3 text-right font-mono font-medium text-slate-900 dark:text-slate-400">
-                                                            {peer.expense_ratio != null ? `${peer.expense_ratio.toFixed(2)}%` : '-'}
-                                                        </td>
+                                                    {peerView === 'performance' && (
+                                                        <>
+                                                            <td className="px-4 py-3 text-right font-mono font-medium text-slate-900 dark:text-slate-400">
+                                                                {peer.cagr_1y != null ? <span className={peer.cagr_1y > 0 ? "text-emerald-500" : peer.cagr_1y < 0 ? "text-rose-500" : ""}>{peer.cagr_1y.toFixed(2)}%</span> : '-'}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right font-mono font-medium text-slate-900 dark:text-slate-400">
+                                                                {peer.cagr_3y != null ? <span className={peer.cagr_3y > 0 ? "text-emerald-500" : peer.cagr_3y < 0 ? "text-rose-500" : ""}>{peer.cagr_3y.toFixed(2)}%</span> : '-'}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right font-mono font-medium text-slate-900 dark:text-slate-400">
+                                                                {peer.cagr_5y != null ? <span className={peer.cagr_5y > 0 ? "text-emerald-500" : peer.cagr_5y < 0 ? "text-rose-500" : ""}>{peer.cagr_5y.toFixed(2)}%</span> : '-'}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right font-mono font-medium text-slate-900 dark:text-slate-400">
+                                                                {peer.cagr_10y != null ? <span className={peer.cagr_10y > 0 ? "text-emerald-500" : peer.cagr_10y < 0 ? "text-rose-500" : ""}>{peer.cagr_10y.toFixed(2)}%</span> : '-'}
+                                                            </td>
+                                                        </>
                                                     )}
-                                                    {hasReturn3Y && (
-                                                        <td className="px-4 py-3 text-right font-mono font-medium text-slate-900 dark:text-slate-400 block sm:table-cell">
-                                                            {peer.return_3y != null ? (
-                                                                <span className={peer.return_3y > 0 ? "text-emerald-500" : peer.return_3y < 0 ? "text-rose-500" : ""}>
-                                                                    {peer.return_3y.toFixed(2)}%
-                                                                </span>
-                                                            ) : '-'}
-                                                        </td>
+                                                    {peerView === 'risk' && (
+                                                        <>
+                                                            {hasExpenseRatio && (
+                                                                <td className="px-4 py-3 text-right font-mono font-medium text-slate-900 dark:text-slate-400">
+                                                                    {peer.expense_ratio != null ? `${peer.expense_ratio.toFixed(2)}%` : '-'}
+                                                                </td>
+                                                            )}
+                                                            <td className="px-4 py-3 text-right font-mono font-medium text-slate-900 dark:text-slate-400">
+                                                                {peer.std_deviation != null ? `${peer.std_deviation.toFixed(2)}%` : '-'}
+                                                            </td>
+                                                            {hasTurnover && (
+                                                                <td className="px-4 py-3 text-right font-mono font-medium text-slate-900 dark:text-slate-400">
+                                                                    {peer.portfolio_turnover != null ? `${peer.portfolio_turnover.toFixed(2)}%` : '-'}
+                                                                </td>
+                                                            )}
+                                                        </>
                                                     )}
-                                                    {hasStdDev && (
-                                                        <td className="px-4 py-3 text-right font-mono font-medium text-slate-900 dark:text-slate-400">
-                                                            {peer.std_deviation != null ? `${peer.std_deviation.toFixed(2)}%` : '-'}
-                                                        </td>
+                                                    {peerView === 'fundamentals' && hasDebtMetrics && (
+                                                        <>
+                                                            <td className="px-4 py-3 text-right font-mono font-medium text-slate-900 dark:text-slate-400">
+                                                                {peer.yield_to_maturity != null ? `${peer.yield_to_maturity.toFixed(2)}%` : '-'}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right font-mono font-medium text-slate-900 dark:text-slate-400">
+                                                                {peer.modified_duration != null ? `${peer.modified_duration.toFixed(2)}` : '-'}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right font-mono font-medium text-slate-900 dark:text-slate-400">
+                                                                {peer.avg_eff_maturity != null ? `${peer.avg_eff_maturity.toFixed(2)}` : '-'}
+                                                            </td>
+                                                        </>
                                                     )}
                                                 </tr>
                                             );
@@ -463,10 +837,63 @@ export function EnrichmentView({ amfiCode }: { amfiCode: string }) {
                                     </tbody>
                                 </table>
                             </div>
+                            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/5 text-center sm:text-right p-4 sm:p-6 pb-2 pt-0">
+                                <Link href={`/drilldown/peers/${amfiCode}`} className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 uppercase tracking-widest inline-flex items-center gap-1 transition-colors">
+                                    Compare All Peers <ChevronRight className="w-3 h-3" />
+                                </Link>
+                            </div>
                         </div>
                     );
                 })()}
             </div>
+
+            {/* Fund Management */}
+            {data.managers?.length > 0 && (
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/5 rounded-2xl shadow-sm overflow-hidden flex flex-col transition-all">
+                    <div className="p-6 pb-4 border-b border-slate-100 dark:border-white/5">
+                        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-200">Fund Managers</h3>
+                    </div>
+                    <div className="p-0">
+                        <ul className="divide-y divide-slate-100 dark:divide-white/5">
+                            {data.managers.map((m: any, idx: number) => {
+                                // Calculate tenure string
+                                let tenureStr = "Present";
+                                if (m.start_date) {
+                                    const sd = new Date(m.start_date);
+                                    let ed = new Date();
+                                    if (m.end_date) {
+                                        ed = new Date(m.end_date);
+                                        tenureStr = `${sd.getFullYear()} - ${ed.getFullYear()}`;
+                                    } else {
+                                        const diffTime = Math.abs(ed.getTime() - sd.getTime());
+                                        const diffYears = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365));
+                                        const diffMonths = Math.floor((diffTime % (1000 * 60 * 60 * 24 * 365)) / (1000 * 60 * 60 * 24 * 30));
+                                        tenureStr = `Since ${sd.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} (${diffYears}y ${diffMonths}m)`;
+                                    }
+                                }
+
+                                return (
+                                    <li key={idx} className="flex flex-col sm:flex-row p-4 sm:p-6 sm:items-center justify-between gap-4 hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
+                                                <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                                            </div>
+                                            <div>
+                                                <p className="font-semibold text-slate-900 dark:text-slate-100">{m.manager_name}</p>
+                                                <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><Briefcase className="w-3 h-3" /> {m.role || 'Fund Manager'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="sm:text-right shrink-0">
+                                            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1 font-medium">Tenure</p>
+                                            <p className="text-sm font-mono text-slate-700 dark:text-slate-300">{tenureStr}</p>
+                                        </div>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
+                </div>
+            )}
 
 
             <div className="text-right">

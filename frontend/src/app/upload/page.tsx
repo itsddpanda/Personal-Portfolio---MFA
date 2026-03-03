@@ -126,7 +126,7 @@ export default function UploadPage() {
 
     return (
         <>
-            <ProcessingOverlay phase={phase} visible={phase !== 'IDLE'} detailText={syncProgress ? `${syncProgress} schemes loaded` : undefined} />
+            <ProcessingOverlay phase={phase} visible={phase !== 'IDLE'} detailText={syncProgress && syncProgress !== '0/0' ? `${syncProgress} schemes loaded` : undefined} />
             <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 sm:p-6 lg:p-8 bg-transparent">
                 <Card className="w-full max-w-md border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xl" title="Upload CAS PDF">
                     <form onSubmit={handleSubmit} className="space-y-5">

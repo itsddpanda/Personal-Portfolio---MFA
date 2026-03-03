@@ -45,7 +45,7 @@ tmp/
 *.sqlite3
 mfa.db
 .agent/
-debug_db.py
+*.py
 rca_compare.py
 get_cas_schema.py
 *.txt
@@ -53,7 +53,10 @@ get_cas_schema.py
 # Docs & local notes (not for version control)
 docs/
 backend/tests/*
-integration/*
+#integration/*
 daas_inf209.json
 test_daas.py
 .gitignore
+
+# Local analysis folder that should not be copied into repo
+minime/

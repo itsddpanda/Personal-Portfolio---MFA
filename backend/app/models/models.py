@@ -130,13 +130,87 @@ class FundEnrichment(SQLModel, table=True):
     name_validation_status: int = Field(default=0)
     freshness_status: int = Field(default=0)
 
-    # Added for Phase 2: Portfolio Composition & Cost
+    # --- New API fields (v2 Integration Guide) ---
+    # Identifiers
+    code: Optional[str] = None  # Moneycontrol code e.g. "MCC519"
+    morningstar_id: Optional[str] = None
+
+    # Fund metadata
+    scheme_short_name: Optional[str] = None
+    category: Optional[str] = None
+    sub_category: Optional[str] = None
+    fund_type: Optional[str] = None
+    plan_name: Optional[str] = None
+    option_name: Optional[str] = None
+    payout_freq: Optional[str] = None
+    inception_date: Optional[dt_date] = None
+    benchmark: Optional[str] = None
+    riskometer: Optional[str] = None
+    investment_style: Optional[str] = None
+    rating: Optional[str] = None
+    objective: Optional[str] = None
+    is_active: Optional[bool] = None
+
+    # NAV snapshot from API
+    latest_nav_api: Optional[float] = None
+    nav_change: Optional[float] = None
+    nav_change_percent: Optional[float] = None
+    nav_date: Optional[dt_date] = None
+
+    # AUM & Cost
+    aum_cr: Optional[float] = None
     expense_ratio: Optional[float] = None
+    turnover_ratio: Optional[float] = None
+    turnover_ratio_cat_avg: Optional[float] = None
+    exit_load: Optional[str] = None
+    lockin_period: Optional[str] = None
+
+    # Valuation Ratios
+    pe: Optional[float] = None
+    cat_avg_pe: Optional[float] = None
+    pb: Optional[float] = None
+    cat_avg_pb: Optional[float] = None
+    price_sale: Optional[float] = None
+    cat_avg_price_sale: Optional[float] = None
+    price_cash_flow: Optional[float] = None
+    cat_avg_price_cash_flow: Optional[float] = None
+    dividend_yield: Optional[float] = None
+    cat_avg_dividend_yield: Optional[float] = None
+    roe: Optional[float] = None
+    cat_avg_roe: Optional[float] = None
+
+    # Debt fund metrics
+    yield_to_maturity: Optional[float] = None
+    modified_duration: Optional[float] = None
+    avg_eff_maturity: Optional[float] = None
+    avg_credit_quality_name: Optional[str] = None
+
+    # Asset Allocation
     equity_alloc: Optional[float] = None
     debt_alloc: Optional[float] = None
     cash_alloc: Optional[float] = None
     other_alloc: Optional[float] = None
 
+    # Cap-weight breakdown
+    large_cap_wt: Optional[float] = None
+    mid_cap_wt: Optional[float] = None
+    small_cap_wt: Optional[float] = None
+    others_cap_wt: Optional[float] = None
+
+    # Concentration metrics
+    number_of_holdings: Optional[int] = None
+    avg_market_cap_cr: Optional[float] = None
+    top_3_sectors_weight: Optional[float] = None
+    top_5_stocks_weight: Optional[float] = None
+    top_10_stocks_weight: Optional[float] = None
+
+    # KBYI insights (stored as JSON text)
+    kbyi: Optional[str] = None
+
+    # API calculation timestamp
+    calculated_at: Optional[datetime] = None
+
+    # --- Relationships ---
     performance: Optional["FundPerformance"] = Relationship(
         back_populates="enrichment",
         sa_relationship_kwargs={"uselist": False, "cascade": "all, delete-orphan"},
@@ -149,7 +223,15 @@ class FundEnrichment(SQLModel, table=True):
         back_populates="enrichment",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
+    sectors: List["FundSector"] = Relationship(
+        back_populates="enrichment",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
     peers: List["FundPeer"] = Relationship(
+        back_populates="enrichment",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+    managers: List["FundManager"] = Relationship(
         back_populates="enrichment",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
@@ -165,7 +247,24 @@ class FundPerformance(SQLModel, table=True):
     cagr_1y: Optional[float] = None
     cagr_3y: Optional[float] = None
     cagr_5y: Optional[float] = None
+    cagr_10y: Optional[float] = None  # NEW
     cagr_tooltip: Optional[str] = None
+
+    # Category rank fields (NEW)
+    cagr_rank_1y: Optional[int] = None
+    cagr_rank_3y: Optional[int] = None
+    cagr_rank_5y: Optional[int] = None
+    cagr_rank_10y: Optional[int] = None
+
+    # Performance-history payload snapshots (JSON text)
+    quarterly_performance: Optional[str] = None
+    best_periods: Optional[str] = None
+    worst_periods: Optional[str] = None
+    sip_returns: Optional[str] = None
+    cagr_cat_avg: Optional[str] = None
+
+    # Snapshot date (NEW)
+    recorded_at: Optional[dt_date] = None
 
     enrichment: FundEnrichment = Relationship(back_populates="performance")
 
@@ -216,8 +315,21 @@ class FundHolding(SQLModel, table=True):
     sector: Optional[str] = None
     weighting: Optional[float] = None
     market_value: Optional[float] = None
+    change_1m: Optional[float] = None  # NEW: 1-month weight change
+    holdings_history: Optional[str] = None  # NEW: JSON array [{per, weightage}]
 
     enrichment: FundEnrichment = Relationship(back_populates="holdings")
+
+
+class FundSector(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    enrichment_id: int = Field(foreign_key="fundenrichment.id", index=True)
+    sector_name: Optional[str] = Field(default="Unknown Sector")
+    weighting: Optional[float] = None
+    market_value: Optional[float] = None
+    change_1m: Optional[float] = None
+
+    enrichment: FundEnrichment = Relationship(back_populates="sectors")
 
 
 class FundPeer(SQLModel, table=True):
@@ -225,8 +337,27 @@ class FundPeer(SQLModel, table=True):
     enrichment_id: int = Field(foreign_key="fundenrichment.id", index=True)
     fund_name: Optional[str] = Field(default="Unknown Peer")
     peer_isin: Optional[str] = None
+    cagr_1y: Optional[float] = None  # NEW (was absent)
+    cagr_3y: Optional[float] = None  # RENAMED from return_3y
+    cagr_5y: Optional[float] = None  # NEW
+    cagr_10y: Optional[float] = None  # NEW
+    yield_to_maturity: Optional[float] = None  # NEW: debt peer
+    modified_duration: Optional[float] = None  # NEW: debt peer
+    avg_eff_maturity: Optional[float] = None  # NEW: debt peer
     expense_ratio: Optional[float] = None
+    portfolio_turnover: Optional[float] = None  # NEW
     std_deviation: Optional[float] = None
-    return_3y: Optional[float] = None
 
     enrichment: FundEnrichment = Relationship(back_populates="peers")
+
+
+class FundManager(SQLModel, table=True):
+    """NEW: Stores fund manager data from the API."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    enrichment_id: int = Field(foreign_key="fundenrichment.id", index=True)
+    manager_name: str = Field(default="Unknown Manager")
+    role: Optional[str] = None
+    start_date: Optional[dt_date] = None
+    end_date: Optional[dt_date] = None
+
+    enrichment: FundEnrichment = Relationship(back_populates="managers")
