@@ -23,6 +23,63 @@ logger = logging.getLogger("sync_amfi")
 
 AMFI_URL = "https://www.amfiindia.com/spages/NAVAll.txt"
 
+# Minimum thresholds for a valid AMFI payload
+MIN_TOTAL_LINES = 10_000
+MIN_VALID_NAVS = 5_000
+# Reject fresh download if it has fewer NAVs than this fraction of the isin_amfi_map
+ISIN_MAP_COVERAGE_THRESHOLD = 0.40
+
+
+def _count_valid_navs(text: str) -> int:
+    """Count lines that look like valid scheme;...;NAV;Date rows."""
+    count = 0
+    for line in text.splitlines():
+        parts = line.strip().split(";")
+        if len(parts) >= 6 and parts[0].strip().isdigit():
+            try:
+                float(parts[4].strip())
+                datetime.datetime.strptime(parts[5].strip(), "%d-%b-%Y")
+                count += 1
+            except ValueError:
+                pass
+    return count
+
+
+def validate_amfi_payload(text: str, isin_map_path: str | None = None) -> tuple[bool, str]:
+    """
+    Validate a raw AMFI NAVAll payload.
+    Returns (is_valid, reason_string).
+    """
+    total_lines = len(text.splitlines())
+    if total_lines < MIN_TOTAL_LINES:
+        return False, f"too few lines ({total_lines} < {MIN_TOTAL_LINES})"
+
+    valid_navs = _count_valid_navs(text)
+    if valid_navs < MIN_VALID_NAVS:
+        return False, f"too few valid NAV rows ({valid_navs} < {MIN_VALID_NAVS})"
+
+    # Cross-check against isin_amfi_map if available
+    if isin_map_path and os.path.exists(isin_map_path):
+        try:
+            import json
+            with open(isin_map_path) as f:
+                isin_map = json.load(f)
+            expected = len(isin_map)
+            min_expected = int(expected * ISIN_MAP_COVERAGE_THRESHOLD)
+            if valid_navs < min_expected:
+                return False, (
+                    f"NAV count ({valid_navs}) is below {ISIN_MAP_COVERAGE_THRESHOLD:.0%} "
+                    f"of isin_amfi_map size ({expected}); expected >= {min_expected}"
+                )
+            logger.debug(
+                f"isin_map coverage check passed: {valid_navs}/{expected} "
+                f"({valid_navs/expected:.1%})"
+            )
+        except Exception as e:
+            logger.warning(f"Could not load isin_amfi_map for validation: {e}")
+
+    return True, f"{valid_navs} valid NAVs across {total_lines} lines"
+
 
 def update_status(session: Session, status: str):
     """Updates the sync status in the SystemState table."""
@@ -80,24 +137,75 @@ def run_sync():
             # Mark status as IN_PROGRESS
             update_status(session, "IN_PROGRESS")
 
+            isin_map_path = (
+                "/data/isin_amfi_map.json"
+                if os.path.exists("/data")
+                else os.path.join(os.path.dirname(__file__), "..", "data", "isin_amfi_map.json")
+            )
+
             if not use_cache:
                 logger.info(f"Fetching NAV data from {AMFI_URL}")
                 response = requests.get(AMFI_URL, timeout=30)
                 response.raise_for_status()
-                payload_text = response.text
+                fresh_text = response.text
 
-                # Cache to disk for offline overrides
-                try:
-                    os.makedirs(os.path.dirname(amfi_file_path), exist_ok=True)
-                    with open(amfi_file_path, "w") as f:
-                        f.write(payload_text)
-                    logger.debug(f"Successfully cached payload to {amfi_file_path}")
-                except Exception as e:
-                    logger.warning(f"Failed to cache NAV payload to disk: {e}")
+                # Validate the fresh download before trusting it
+                is_valid, reason = validate_amfi_payload(fresh_text, isin_map_path)
+                if is_valid:
+                    logger.info(f"Fresh payload validated OK: {reason}")
+                    payload_text = fresh_text
+                    # Persist to disk only if valid (don't overwrite a good cache with garbage)
+                    try:
+                        os.makedirs(os.path.dirname(amfi_file_path), exist_ok=True)
+                        with open(amfi_file_path, "w") as f:
+                            f.write(payload_text)
+                        logger.debug(f"Successfully cached payload to {amfi_file_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to cache NAV payload to disk: {e}")
+                else:
+                    logger.warning(
+                        f"Fresh AMFI payload appears partial/broken: {reason}. "
+                        f"Falling back to cached file."
+                    )
+                    if os.path.exists(amfi_file_path):
+                        logger.info(f"Loading fallback NAV data from {amfi_file_path}")
+                        with open(amfi_file_path, "r") as f:
+                            payload_text = f.read()
+                        # Validate the fallback too
+                        fb_valid, fb_reason = validate_amfi_payload(payload_text, isin_map_path)
+                        if not fb_valid:
+                            raise RuntimeError(
+                                f"Fallback cache is also invalid: {fb_reason}"
+                            )
+                        logger.info(f"Fallback cache validated OK: {fb_reason}")
+                    else:
+                        raise RuntimeError(
+                            f"Fresh payload invalid ({reason}) and no fallback cache exists at {amfi_file_path}"
+                        )
             else:
                 logger.info(f"Loading NAV data from disk cache at {amfi_file_path}")
                 with open(amfi_file_path, "r") as f:
                     payload_text = f.read()
+                # Validate cached file too (catches a corrupt manual placement)
+                is_valid, reason = validate_amfi_payload(payload_text, isin_map_path)
+                if not is_valid:
+                    logger.warning(
+                        f"Cached NAV file failed validation: {reason}. Forcing fresh fetch."
+                    )
+                    logger.info(f"Fetching NAV data from {AMFI_URL}")
+                    response = requests.get(AMFI_URL, timeout=30)
+                    response.raise_for_status()
+                    payload_text = response.text
+                    fv, fr = validate_amfi_payload(payload_text, isin_map_path)
+                    if not fv:
+                        raise RuntimeError(f"Fresh payload also invalid after cache miss: {fr}")
+                    logger.info(f"Fresh payload validated OK: {fr}")
+                    try:
+                        os.makedirs(os.path.dirname(amfi_file_path), exist_ok=True)
+                        with open(amfi_file_path, "w") as f:
+                            f.write(payload_text)
+                    except Exception as e:
+                        logger.warning(f"Failed to write refreshed cache: {e}")
 
             lines = payload_text.splitlines()
             logger.debug(f"Started processing {len(lines)} lines of data")

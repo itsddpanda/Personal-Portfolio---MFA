@@ -1,12 +1,5 @@
 #!/bin/bash
 
-# Start cron service in background
-if ! service cron start; then
-    echo "Error: Failed to start cron service." >&2
-    exit 1
-fi
-
-# Export environment variables for cron, following Debian best practices
 # Filter out locale variables for /etc/environment and use /etc/default/locale instead
 printenv | grep -v "no_proxy" | grep -vE "^(LANG|LC_|LANGUAGE)" >> /etc/environment
 echo "LANG=C.UTF-8" > /etc/default/locale
