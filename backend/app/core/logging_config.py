@@ -15,7 +15,7 @@ def setup_logging():
 
     logging.basicConfig(
         level=log_level,
-        format="%(asctime)s | %(name)s | %(levelname)-8s | %(message)s",
+        format="%(asctime)s | %(levelname)-s | %(name)-8s | %(message)s",
         datefmt="%Y-%m-%d %H:%M",
         handlers=handlers,
     )

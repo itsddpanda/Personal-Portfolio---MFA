@@ -13,8 +13,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
-COPY /data/NAVAll.txt /data/NAVAll.txt
-COPY /data/isin_map.json /data/isin_map.json
+# move fallback NAVdata
+COPY /app/data/NAVAll.txt /data/
+
 COPY start.sh /app
 
 RUN chmod +x /app/start.sh && sed -i 's/\r$//' /app/start.sh

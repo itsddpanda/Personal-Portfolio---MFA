@@ -6,16 +6,20 @@ import logging
 from sqlmodel import Session
 from sqlmodel import select
 
+
 # Add the parent directory to the python path so we can import 'app'
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+# This is supposed to be here
 from app.db.engine import get_session, engine
 from app.models.models import Scheme, NavHistory, SystemState
 
+log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+log_level = getattr(logging, log_level_str, logging.INFO)
 # Configure logging
 logging.basicConfig(
     level=log_level,
-    format="%(asctime)s | %(name)s | %(levelname)-8s | %(message)s",
+    format="%(asctime)s | %(levelname)-s | %(name)-8s | %(message)s",
     datefmt="%Y-%m-%d %H:%M",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
