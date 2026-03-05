@@ -178,9 +178,10 @@ jobs:
           sed -i -e '/# Clone the repository/{n;s|git clone .*|git clone '"$REPO_URL"'\.git \&\& cd '"$REPO_NAME"'|;}' README.md
           
           # Replace the backend URL in the Docker Images table
-          sed -i -e 's@| Backend | `ghcr.io/.*-backend:latest` |@| Backend | `ghcr.io/'"$IMAGE_LOWER"'-frontend:latest` |@g' README.md
+          sed -i -e 's@| Backend | `ghcr.io/.*-backend:latest` |@| Backend | `ghcr.io/'"$IMAGE_LOWER"'-backend:latest` |@g' README.md
           
           # Replace the frontend URL in the Docker Images table
+          sed -i -e 's@| Frontend | `ghcr.io/.*-frontend:latest` |@| Frontend | `ghcr.io/'"$IMAGE_LOWER"'-frontend:latest` |@g' README.md
           sed -i -e 's@| Frontend | `ghcr.io/.*-frontend:latest` |@| Frontend | `ghcr.io/'"$IMAGE_LOWER"'-frontend:latest` |@g' README.md
           
           # Only commit if there are changes
