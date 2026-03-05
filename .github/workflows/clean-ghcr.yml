@@ -1,0 +1,34 @@
+name: Clean GHCR Packages
+
+on:
+  schedule:
+    # Run every Sunday at midnight
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: 'Number of images to keep'
+        required: true
+        default: '3'
+
+jobs:
+  clean-ghcr:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    
+    strategy:
+      matrix:
+        package: ['private_fund_analyzer-backend', 'private_fund_analyzer-frontend']
+
+    steps:
+      - name: Delete old packages
+        uses: snok/container-retention-policy@v3.0.0
+        with:
+          account: ${{ github.repository_owner }}
+          image-names: ${{ matrix.package }}
+          image-tags: '*'
+          cut-off: 1h
+          keep-at-least: ${{ github.event.inputs.keep || '3' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
