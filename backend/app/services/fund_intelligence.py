@@ -211,6 +211,43 @@ def parse_enrichment_response(
         except (ValueError, TypeError):
             calculated_at_dt = None
 
+    # Normalization calculations for Asset and Cap
+    raw_equity_alloc = _safe_float(data.get("equity_alloc"))
+    raw_debt_alloc = _safe_float(data.get("debt_alloc"))
+    raw_cash_alloc = _safe_float(data.get("cash_alloc"))
+    raw_other_alloc = _safe_float(data.get("other_alloc"))
+
+    total_asset_alloc = (raw_equity_alloc or 0.0) + (raw_debt_alloc or 0.0) + (raw_cash_alloc or 0.0) + (raw_other_alloc or 0.0)
+
+    equity_alloc_final = raw_equity_alloc
+    debt_alloc_final = raw_debt_alloc
+    cash_alloc_final = raw_cash_alloc
+    other_alloc_final = raw_other_alloc
+
+    if total_asset_alloc > 100.0:
+        if raw_equity_alloc is not None: equity_alloc_final = (raw_equity_alloc / total_asset_alloc) * 100.0
+        if raw_debt_alloc is not None: debt_alloc_final = (raw_debt_alloc / total_asset_alloc) * 100.0
+        if raw_cash_alloc is not None: cash_alloc_final = (raw_cash_alloc / total_asset_alloc) * 100.0
+        if raw_other_alloc is not None: other_alloc_final = (raw_other_alloc / total_asset_alloc) * 100.0
+
+    raw_large_cap_wt = _safe_float(data.get("large_cap_wt"))
+    raw_mid_cap_wt = _safe_float(data.get("mid_cap_wt"))
+    raw_small_cap_wt = _safe_float(data.get("small_cap_wt"))
+    raw_others_cap_wt = _safe_float(data.get("others_cap_wt"))
+
+    total_cap_weight = (raw_large_cap_wt or 0.0) + (raw_mid_cap_wt or 0.0) + (raw_small_cap_wt or 0.0) + (raw_others_cap_wt or 0.0)
+
+    large_cap_wt_final = raw_large_cap_wt
+    mid_cap_wt_final = raw_mid_cap_wt
+    small_cap_wt_final = raw_small_cap_wt
+    others_cap_wt_final = raw_others_cap_wt
+
+    if total_cap_weight > 100.0:
+        if raw_large_cap_wt is not None: large_cap_wt_final = (raw_large_cap_wt / total_cap_weight) * 100.0
+        if raw_mid_cap_wt is not None: mid_cap_wt_final = (raw_mid_cap_wt / total_cap_weight) * 100.0
+        if raw_small_cap_wt is not None: small_cap_wt_final = (raw_small_cap_wt / total_cap_weight) * 100.0
+        if raw_others_cap_wt is not None: others_cap_wt_final = (raw_others_cap_wt / total_cap_weight) * 100.0
+
     # 1. Base Enrichment Record — all flat fields from API
     enrichment = FundEnrichment(
         scheme_id=scheme_id,
@@ -218,7 +255,7 @@ def parse_enrichment_response(
         fetched_at=datetime.utcnow(),
 
         # Identifiers
-        code=data.get("code"),
+        code=None,  # Disabled per requirement
         morningstar_id=data.get("morningstar_id"),
 
         # Fund metadata
@@ -272,16 +309,16 @@ def parse_enrichment_response(
         avg_credit_quality_name=data.get("avg_credit_quality_name"),
 
         # Asset Allocation
-        equity_alloc=_safe_float(data.get("equity_alloc")),
-        debt_alloc=_safe_float(data.get("debt_alloc")),
-        cash_alloc=_safe_float(data.get("cash_alloc")),
-        other_alloc=_safe_float(data.get("other_alloc")),
-
-        # Cap-weight breakdown
-        large_cap_wt=_safe_float(data.get("large_cap_wt")),
-        mid_cap_wt=_safe_float(data.get("mid_cap_wt")),
-        small_cap_wt=_safe_float(data.get("small_cap_wt")),
-        others_cap_wt=_safe_float(data.get("others_cap_wt")),
+        equity_alloc=equity_alloc_final,
+        debt_alloc=debt_alloc_final,
+        cash_alloc=cash_alloc_final,
+        other_alloc=other_alloc_final,
+        
+        # Cap-weight breakdown (Normalized)
+        large_cap_wt=large_cap_wt_final,
+        mid_cap_wt=mid_cap_wt_final,
+        small_cap_wt=small_cap_wt_final,
+        others_cap_wt=others_cap_wt_final,
 
         # Concentration metrics
         number_of_holdings=_safe_int(data.get("number_of_holdings")),
@@ -504,18 +541,29 @@ def parse_enrichment_response(
         holdings_data = []
 
     holdings_list = []
+    
+    # Calculate sum of holding weights for normalization
+    total_holding_weight = sum(_safe_float(h.get("weighting")) or 0.0 for h in holdings_data if isinstance(h, dict))
+    
     for h in holdings_data:
         if not h or not isinstance(h, dict):
             continue
         # Serialize holdings_history array to JSON text if present
         hh = h.get("holdings_history")
         hh_json = json.dumps(hh) if hh else None
+        
+        raw_weight = _safe_float(h.get("weighting"))
+        
+        # Normalize if total exceeds 100%
+        final_weight = raw_weight
+        if raw_weight is not None and total_holding_weight > 100.0:
+            final_weight = (raw_weight / total_holding_weight) * 100.0
 
         holdings_list.append(
             FundHolding(
                 stock_name=h.get("stock_name") or "Unknown Stock",
                 sector=h.get("sector"),
-                weighting=_safe_float(h.get("weighting")),
+                weighting=final_weight,
                 market_value=_safe_float(h.get("market_value")),
                 change_1m=_safe_float(h.get("change_1m")),
                 holdings_history=hh_json,
@@ -529,14 +577,25 @@ def parse_enrichment_response(
         sectors_data = []
 
     sectors_list = []
+    
+    # Calculate sum of sector weights for normalization
+    total_sector_weight = sum(_safe_float(s.get("weighting")) or 0.0 for s in sectors_data if isinstance(s, dict))
+    
     for s in sectors_data:
         if not s or not isinstance(s, dict):
             continue
+            
+        raw_weight = _safe_float(s.get("weighting"))
+        
+        # Normalize if total exceeds 100%
+        final_weight = raw_weight
+        if raw_weight is not None and total_sector_weight > 100.0:
+            final_weight = (raw_weight / total_sector_weight) * 100.0
 
         sectors_list.append(
             FundSector(
                 sector_name=s.get("sector_name") or "Unknown Sector",
-                weighting=_safe_float(s.get("weighting")),
+                weighting=final_weight,
                 market_value=_safe_float(s.get("market_value")),
                 change_1m=_safe_float(s.get("change_1m")),
             )
@@ -608,6 +667,12 @@ def parse_enrichment_response(
             )
         )
     enrichment.managers = managers_list
+    
+    # 7. Normalization Meta Tracking
+    enrichment.is_sectors_normalized = total_sector_weight > 100.0
+    enrichment.is_holdings_normalized = total_holding_weight > 100.0
+    enrichment.is_asset_normalized = total_asset_alloc > 100.0
+    enrichment.is_cap_normalized = total_cap_weight > 100.0
 
     # Run Data Validation Engine (in-memory update)
     enrichment_nav = data.get("latest_nav")

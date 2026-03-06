@@ -204,6 +204,12 @@ class FundEnrichment(SQLModel, table=True):
     top_5_stocks_weight: Optional[float] = None
     top_10_stocks_weight: Optional[float] = None
 
+    # Normalization Meta Flags
+    is_sectors_normalized: Optional[bool] = Field(default=False)
+    is_holdings_normalized: Optional[bool] = Field(default=False)
+    is_asset_normalized: Optional[bool] = Field(default=False)
+    is_cap_normalized: Optional[bool] = Field(default=False)
+
     # KBYI insights (stored as JSON text)
     kbyi: Optional[str] = None
 
