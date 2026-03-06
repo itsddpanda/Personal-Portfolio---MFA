@@ -20,7 +20,7 @@ jobs:
     
     strategy:
       matrix:
-        package: ['private_fund_analyzer-backend', 'private_fund_analyzer-frontend']
+        package: ['mfa-backend', 'mfa-frontend']
 
     steps:
       - name: Delete old packages
@@ -29,6 +29,6 @@ jobs:
           account: ${{ github.repository_owner }}
           image-names: ${{ matrix.package }}
           image-tags: '*'
-          cut-off: 1h
+          cut-off: 7d
           keep-at-least: ${{ github.event.inputs.keep || '3' }}
           token: ${{ secrets.GITHUB_TOKEN }}
