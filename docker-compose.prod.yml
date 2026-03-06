@@ -1,7 +1,7 @@
 services:
   backend:
-    image: ghcr.io/itsddpanda/pfa-backend:latest
-    container_name: pfa-backend
+    image: ghcr.io/itsddpanda/mfa-backend:latest
+    container_name: mfa-backend
     # Port NOT exposed to host — frontend proxies API calls internally via Next.js rewrites
     volumes:
       - back_data:/data
@@ -16,8 +16,8 @@ services:
       start_period: 15s
 
   frontend:
-    image: ghcr.io/itsddpanda/pfa-frontend:latest
-    container_name: pfa-frontend
+    image: ghcr.io/itsddpanda/mfa-frontend:latest
+    container_name: mfa-frontend
     ports:
       - "3001:3001"
     restart: unless-stopped
@@ -27,4 +27,4 @@ services:
 
 volumes:
   back_data:
-    name: pfa-data
+    name: mfa-data
