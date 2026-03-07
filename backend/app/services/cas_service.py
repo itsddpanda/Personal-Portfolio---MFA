@@ -201,6 +201,43 @@ def process_cas_data(
     discovered_isins = set()  # Collect ISINs for bulk enrichment prefetch
 
     for folio_data in folios:
+        # Extract and Normalize AMC Name at the folio level before creating it
+        raw_amc = folio_data.get("amc", "").strip()
+        amc_obj = None
+
+        if raw_amc:
+            amc_code = None
+            search_name = raw_amc
+            raw_clean = raw_amc.lower().replace(" mutual fund", "").replace(" mf", "").strip()
+
+            # 1. Map to standardized AMC_MAP code via fuzzy substring search
+            for map_name, m_code in AMC_MAP.items():
+                map_clean = map_name.lower().replace(" mutual fund", "").replace(" mf", "").strip()
+                if raw_clean == map_clean or raw_clean in map_clean or map_clean in raw_clean:
+                    amc_code = m_code
+                    search_name = map_name
+                    break
+            
+            if amc_code:
+                # Lookup in DB by code
+                amc_obj = session.get(AMC, amc_code) or session.exec(select(AMC).where(AMC.code == str(amc_code))).first()
+                if not amc_obj:
+                    # Create from map if missing in DB
+                    amc_obj = AMC(name=search_name, code=str(amc_code))
+                    session.add(amc_obj)
+                    session.commit()
+                    session.refresh(amc_obj)
+            else:
+                # 2. Fallback to legacy normalization if totally unknown
+                norm_name = raw_amc.replace("Mutual Fund", "").strip()
+                amc_obj = session.exec(select(AMC).where(AMC.name == norm_name)).first()
+                if not amc_obj:
+                    code = norm_name.upper().replace(" ", "_")
+                    amc_obj = AMC(name=norm_name, code=code)
+                    session.add(amc_obj)
+                    session.commit()
+                    session.refresh(amc_obj)
+
         folio_num = folio_data.get("folio")
 
         # Get or Create Folio
@@ -211,7 +248,14 @@ def process_cas_data(
         ).first()
 
         if not folio_obj:
-            folio_obj = Folio(portfolio_id=portfolio.id, folio_number=folio_num)
+            # Assing amc_id directly
+            folio_obj = Folio(portfolio_id=portfolio.id, folio_number=folio_num, amc_id=amc_obj.id if amc_obj else None)
+            session.add(folio_obj)
+            session.commit()
+            session.refresh(folio_obj)
+        elif not folio_obj.amc_id and amc_obj:
+            # Retrospectively assign AMC for folios missing it
+            folio_obj.amc_id = amc_obj.id
             session.add(folio_obj)
             session.commit()
             session.refresh(folio_obj)
@@ -248,36 +292,8 @@ def process_cas_data(
             if not amfi and isin:
                 amfi = ISIN_MAP.get(isin)
 
-            # Extract and Normalize AMC Name
-            raw_amc = folio_data.get("amc", "").strip()
-            amc_obj = None
-
-            if raw_amc:
-                # 1. Try exact lookup in AMC_MAP
-                # Standardize raw_amc by adding "Mutual Fund" if missing, to match map keys
-                search_name = raw_amc if "Mutual Fund" in raw_amc else f"{raw_amc} Mutual Fund"
-                amc_code = AMC_MAP.get(search_name)
-                
-                if amc_code:
-                    # Lookup in DB by code
-                    amc_obj = session.get(AMC, amc_code) or session.exec(select(AMC).where(AMC.code == str(amc_code))).first()
-                    if not amc_obj:
-                        # Create from map if missing in DB
-                        amc_obj = AMC(name=search_name, code=str(amc_code))
-                        session.add(amc_obj)
-                        session.commit()
-                        session.refresh(amc_obj)
-                else:
-                    # 2. Fallback to legacy normalization if not in map
-                    norm_name = raw_amc.replace("Mutual Fund", "").strip()
-                    amc_obj = session.exec(select(AMC).where(AMC.name == norm_name)).first()
-                    if not amc_obj:
-                        code = norm_name.upper().replace(" ", "_")
-                        amc_obj = AMC(name=norm_name, code=code)
-                        session.add(amc_obj)
-                        session.commit()
-                        session.refresh(amc_obj)
-
+            # AMC lookup occurs at folio-level now, we just pass amc_obj down to the scheme
+            
             # Check if Scheme Exists
             scheme_obj = session.exec(select(Scheme).where(Scheme.isin == isin)).first()
 

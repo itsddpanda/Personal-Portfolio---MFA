@@ -1,6 +1,6 @@
 import requests
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import List, Tuple, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -102,3 +102,51 @@ def fetch_amfi_date_nav(amfi_code: str, target_date: date) -> Optional[float]:
         logger.error(f"Failed to fetch matching AMFI date nav: {e}")
 
     return None
+
+
+def fetch_amfi_range_navs(
+    amfi_code: str, from_date: date, to_date: date
+) -> List[Tuple[date, float]]:
+    """
+    Fetches NAV data for a specific scheme over a date range from the AMFI portal.
+    Max 90-day window between from_date and to_date (enforced by AMFI).
+
+    CSV format: Scheme Code;Scheme Name;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;
+                Net Asset Value;Repurchase Price;Sale Price;Date
+
+    Returns: list of (date, nav) tuples for the matching amfi_code.
+    """
+    if (to_date - from_date).days > 90:
+        logger.warning(
+            f"Date range exceeds 90 days for {amfi_code}. Clamping from_date."
+        )
+        from_date = to_date - timedelta(days=90)
+
+    results = []
+    try:
+        frmdt = from_date.strftime("%d-%b-%Y")
+        todt = to_date.strftime("%d-%b-%Y")
+        url = f"https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx?frmdt={frmdt}&todt={todt}"
+
+        logger.info(f"Fetching AMFI range NAVs for {amfi_code}: {frmdt} → {todt}")
+        response = requests.get(url, timeout=15)
+
+        if response.status_code == 200:
+            for line in response.text.splitlines():
+                parts = line.split(";")
+                # 8-column format: Code;Name;ISIN1;ISIN2;NAV;Repurchase;Sale;Date
+                if len(parts) >= 8 and parts[0].strip() == amfi_code:
+                    try:
+                        nav_val = float(parts[4].strip())
+                        date_obj = datetime.strptime(parts[7].strip(), "%d-%b-%Y").date()
+                        results.append((date_obj, nav_val))
+                    except ValueError:
+                        continue
+        else:
+            logger.warning(f"AMFI range API returned HTTP {response.status_code}")
+
+    except Exception as e:
+        logger.error(f"Failed to fetch AMFI range NAVs for {amfi_code}: {e}")
+
+    logger.info(f"Got {len(results)} NAV records for {amfi_code} in range")
+    return results
