@@ -13,6 +13,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+# ensure config is explicitly included and identifiable
+COPY config/ ./config/
 # move fallback NAVdata
 COPY /app/data/NAVAll.txt /data/
 

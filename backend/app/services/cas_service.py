@@ -13,10 +13,12 @@ from sqlmodel import Session, select
 from fastapi import HTTPException
 from app.models.models import User, Portfolio, Folio, Scheme, Transaction, AMC
 
-# Load ISIN Map
+# Load Maps
 ISIN_MAP = {}
+AMC_MAP = {}
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ISIN_MAP_PATH = os.path.join(BASE_DIR, "data", "isin_amfi_map.json")
+AMC_MAP_PATH = os.path.join(BASE_DIR, "config", "amc_map.json")
 
 # Fallback for Docker container path if BASE_DIR logic doesn't align with mount
 if not os.path.exists(ISIN_MAP_PATH):
@@ -24,6 +26,12 @@ if not os.path.exists(ISIN_MAP_PATH):
         ISIN_MAP_PATH = "/data/isin_amfi_map.json"
     elif os.path.exists("./data/isin_amfi_map.json"):
         ISIN_MAP_PATH = "./data/isin_amfi_map.json"
+
+if not os.path.exists(AMC_MAP_PATH):
+    if os.path.exists("/app/config/amc_map.json"):
+        AMC_MAP_PATH = "/app/config/amc_map.json"
+    elif os.path.exists("./config/amc_map.json"):
+        AMC_MAP_PATH = "./config/amc_map.json"
 
 try:
     if os.path.exists(ISIN_MAP_PATH):
@@ -33,6 +41,15 @@ try:
         print(f"Warning: ISIN map not found at {ISIN_MAP_PATH}")
 except Exception as e:
     print(f"Warning: Failed to load ISIN map: {e}")
+
+try:
+    if os.path.exists(AMC_MAP_PATH):
+        with open(AMC_MAP_PATH, "r") as f:
+            AMC_MAP = json.load(f)
+    else:
+        print(f"Warning: AMC map not found at {AMC_MAP_PATH}")
+except Exception as e:
+    print(f"Warning: Failed to load AMC map: {e}")
 
 
 def process_cas_data(
@@ -236,14 +253,30 @@ def process_cas_data(
             amc_obj = None
 
             if raw_amc:
-                norm_name = raw_amc.replace("Mutual Fund", "").strip()
-                amc_obj = session.exec(select(AMC).where(AMC.name == norm_name)).first()
-                if not amc_obj:
-                    code = norm_name.upper().replace(" ", "_")
-                    amc_obj = AMC(name=norm_name, code=code)
-                    session.add(amc_obj)
-                    session.commit()
-                    session.refresh(amc_obj)
+                # 1. Try exact lookup in AMC_MAP
+                # Standardize raw_amc by adding "Mutual Fund" if missing, to match map keys
+                search_name = raw_amc if "Mutual Fund" in raw_amc else f"{raw_amc} Mutual Fund"
+                amc_code = AMC_MAP.get(search_name)
+                
+                if amc_code:
+                    # Lookup in DB by code
+                    amc_obj = session.get(AMC, amc_code) or session.exec(select(AMC).where(AMC.code == str(amc_code))).first()
+                    if not amc_obj:
+                        # Create from map if missing in DB
+                        amc_obj = AMC(name=search_name, code=str(amc_code))
+                        session.add(amc_obj)
+                        session.commit()
+                        session.refresh(amc_obj)
+                else:
+                    # 2. Fallback to legacy normalization if not in map
+                    norm_name = raw_amc.replace("Mutual Fund", "").strip()
+                    amc_obj = session.exec(select(AMC).where(AMC.name == norm_name)).first()
+                    if not amc_obj:
+                        code = norm_name.upper().replace(" ", "_")
+                        amc_obj = AMC(name=norm_name, code=code)
+                        session.add(amc_obj)
+                        session.commit()
+                        session.refresh(amc_obj)
 
             # Check if Scheme Exists
             scheme_obj = session.exec(select(Scheme).where(Scheme.isin == isin)).first()
