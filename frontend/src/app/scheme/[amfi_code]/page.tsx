@@ -35,6 +35,8 @@ interface SchemeKPIs {
     xirr?: number;
     xirr_status?: string;
     stamp_duty?: number;
+    nav_change_percent?: number;
+    nav_change_amount?: number;
 }
 
 interface TransactionRow {
@@ -210,12 +212,37 @@ export default function SchemeDetailsPage() {
                         </p>
                     </div>
 
-                    <div className="text-left md:text-right bg-slate-50 dark:bg-slate-950/50 backdrop-blur-md p-4 rounded-2xl border border-slate-200 dark:border-white/5">
-                        <p className="text-xs uppercase tracking-widest text-slate-500 font-semibold mb-1">Latest NAV</p>
-                        <p className="text-2xl font-bold text-slate-900 dark:text-slate-200 font-mono tracking-tight drop-shadow-sm">
-                            ₹{scheme.latest_nav ? scheme.latest_nav.toFixed(4) : 'N/A'}
-                        </p>
-                        <p className="text-[11px] text-slate-500 mt-0.5">As of {scheme.latest_nav_date}</p>
+                    <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl p-5 rounded-2xl border border-slate-200/50 dark:border-white/10 shadow-lg min-w-[260px]">
+                        <div className="flex justify-between items-center mb-2">
+                            <p className="text-[11px] uppercase tracking-widest text-slate-500 dark:text-slate-400 font-bold">Latest NAV</p>
+                            <span className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md font-mono">
+                                {scheme.latest_nav_date}
+                            </span>
+                        </div>
+
+                        <div className="flex items-end justify-between gap-6">
+                            <p className="text-3xl font-black text-slate-900 dark:text-white font-mono tracking-tight">
+                                ₹{scheme.latest_nav ? scheme.latest_nav.toFixed(4) : 'N/A'}
+                            </p>
+
+                            {kpis.nav_change_amount != null && kpis.nav_change_percent != null && (
+                                <div className={`flex flex-col items-end ${kpis.nav_change_amount >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
+                                    <div className="flex items-center gap-1">
+                                        {kpis.nav_change_amount >= 0 ? (
+                                            <svg className="w-5 h-5 drop-shadow-sm" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                                        ) : (
+                                            <svg className="w-5 h-5 drop-shadow-sm" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                                        )}
+                                        <p className="text-xl font-bold font-mono tracking-tight drop-shadow-sm">
+                                            ₹{Math.abs(kpis.nav_change_amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                        </p>
+                                    </div>
+                                    <span className="text-sm font-bold bg-current/10 px-2 py-0.5 rounded-md flex items-center mt-1 border border-current/20">
+                                        {Math.abs(kpis.nav_change_percent).toFixed(2)}%
+                                    </span>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -255,6 +282,7 @@ export default function SchemeDetailsPage() {
                         </span>
                     </div>
                 </div>
+
 
                 <div className="bg-slate-50 dark:bg-slate-950/80 rounded-2xl p-6 border border-slate-200 dark:border-white/5 shadow-md flex flex-col justify-between relative overflow-hidden block">
                     <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-4 relative z-10 drop-shadow-sm">XIRR (Annualized)</p>

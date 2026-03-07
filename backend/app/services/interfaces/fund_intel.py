@@ -96,6 +96,8 @@ class ManagerDTO(BaseModel):
 class EnrichmentDTO(BaseModel):
     id: int
     scheme_id: int
+    isin: Optional[str] = None
+    scheme_name: Optional[str] = None
     fund_name: Optional[str] = None
     fetched_at: datetime
     validation_status: int

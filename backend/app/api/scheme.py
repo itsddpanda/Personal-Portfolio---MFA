@@ -181,6 +181,28 @@ def get_scheme_details(
         select(FundEnrichment).where(FundEnrichment.scheme_id == scheme.id)
     ).first()
 
+    # Calculate exact local 1D change %
+    nav_history_records = session.exec(
+        select(NavHistory)
+        .where(NavHistory.scheme_id == scheme.id)
+        .order_by(NavHistory.date.desc())
+        .limit(2)
+    ).all()
+
+    calc_nav_change_pct = None
+    if len(nav_history_records) >= 2:
+        nav_today = nav_history_records[0].nav
+        nav_yday = nav_history_records[1].nav
+        if nav_yday > 0:
+            calc_nav_change_pct = ((nav_today - nav_yday) / nav_yday) * 100
+    elif enrichment and enrichment.nav_change_percent is not None:
+        calc_nav_change_pct = enrichment.nav_change_percent
+
+    calc_nav_change_amount = None
+    if calc_nav_change_pct is not None:
+        calc_nav_change_amount = current_value * (calc_nav_change_pct / (100.0 + calc_nav_change_pct))
+
+
     return {
         "scheme": {
             "name": scheme.name,
@@ -207,6 +229,8 @@ def get_scheme_details(
             "xirr": round(calc_xirr, 2) if calc_xirr is not None else None,
             "xirr_status": xirr_status,
             "stamp_duty": round(total_stamp_duty, 2),
+            "nav_change_percent": calc_nav_change_pct,
+            "nav_change_amount": round(calc_nav_change_amount, 2) if calc_nav_change_amount is not None else None,
         },
         "ledger": ledger,
     }
@@ -367,5 +391,8 @@ def get_scheme_enrichment(
     # Re-generate the custom highlights with context
     personalized_highlights = generate_custom_highlights(dto, thresholds=resolved_thresholds)
     dto.kbyi = json.dumps(personalized_highlights)
+    
+    dto.isin = scheme.isin
+    dto.scheme_name = scheme.name
 
     return dto

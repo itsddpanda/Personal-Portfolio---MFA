@@ -837,10 +837,16 @@ export function EnrichmentView({ amfiCode, onLoaded }: { amfiCode: string; onLoa
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                                         {sortedPeers.map((peer: any, i: number) => {
+                                            const isHighlight = (peer.peer_isin === data.isin) || (peer.fund_name === data.scheme_name);
                                             return (
-                                                <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                                    <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
-                                                        <div className="font-medium whitespace-nowrap md:whitespace-normal" title={peer.fund_name}>{peer.fund_name}</div>
+                                                <tr key={i} className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all ${isHighlight ? 'bg-indigo-100/50 dark:bg-indigo-500/20 shadow-[inset_4px_0_0_0_theme(colors.indigo.500)]' : ''}`}>
+                                                    <td className={`px-4 py-3 ${isHighlight ? 'text-indigo-800 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>
+                                                        <div className={`whitespace-nowrap md:whitespace-normal ${isHighlight ? 'font-bold' : 'font-medium'}`} title={peer.fund_name}>
+                                                            {peer.fund_name}
+                                                            {isHighlight && (
+                                                                <span className="ml-2 px-1.5 py-0.5 text-[9px] bg-indigo-500 text-white rounded uppercase tracking-tighter">Current</span>
+                                                            )}
+                                                        </div>
                                                         {peer.peer_isin && peer.fund_name === 'Unknown Peer' && (
                                                             <div className="text-[10px] text-slate-400 font-mono mt-0.5" title="Peer ISIN">ISIN: {peer.peer_isin}</div>
                                                         )}

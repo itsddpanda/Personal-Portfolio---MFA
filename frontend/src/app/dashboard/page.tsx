@@ -17,6 +17,7 @@ interface Holding {
     current_value: number;
     invested_value: number;
     is_estimated: boolean;
+    nav_change_percent: number | null;
 }
 
 interface SummaryData {
@@ -30,6 +31,8 @@ interface SummaryData {
     total_stamp_duty: number;
     nav_sync_status: string;
     nav_sync_last_run: string | null;
+    portfolio_1d_change_percent: number | null;
+    portfolio_1d_change_amount: number | null;
 }
 
 import { useToast } from '@/components/ui/Toast';
@@ -137,10 +140,10 @@ export default function DashboardPage() {
         }
     };
 
-    if (loading || (syncing && !data)) {
+    if (loading || syncing) {
         return (
-            <div className="min-h-screen">
-                <ProcessingOverlay phase={syncing ? 'SYNCING' : 'READING'} visible={true} detailText={syncProgress && syncProgress !== '0/0' ? `${syncProgress} schemes loaded` : undefined} />
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-950/50">
+                <ProcessingOverlay phase={syncing ? 'SYNCING' : 'READING'} visible={true} detailText={syncProgress && syncProgress !== '0/0' ? `Updating NAV: ${syncProgress}` : 'Synchronizing NAV History...'} />
             </div>
         );
     }
@@ -243,6 +246,20 @@ export default function DashboardPage() {
                             </span>
                         </p>
                     </Card>
+                    <Card title="1D Change">
+                        {data.portfolio_1d_change_amount !== null && data.portfolio_1d_change_percent !== null ? (
+                            <>
+                                <p className={`text-4xl font-bold ${data.portfolio_1d_change_amount >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
+                                    {data.portfolio_1d_change_amount >= 0 ? '+' : '-'}₹{Math.abs(data.portfolio_1d_change_amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                </p>
+                                <p className={`text-sm mt-2 font-medium ${data.portfolio_1d_change_percent >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
+                                    ({data.portfolio_1d_change_percent > 0 ? '+' : ''}{data.portfolio_1d_change_percent.toFixed(2)}%)
+                                </p>
+                            </>
+                        ) : (
+                            <p className="text-4xl font-bold text-slate-400">--</p>
+                        )}
+                    </Card>
                     <Card title="XIRR" href="/drilldown/xirr">
                         <p className={`text-4xl font-bold ${xirr >= 0 ? 'text-violet-600 dark:text-violet-400 drop-shadow-[0_0_12px_rgba(167,139,250,0.3)]' : 'text-rose-500 dark:text-rose-400'}`}>
                             {xirr.toFixed(2)}%
@@ -259,6 +276,7 @@ export default function DashboardPage() {
                                     <th className="px-6 py-4 rounded-tl-xl whitespace-nowrap">Scheme</th>
                                     <th className="px-6 py-4 text-right whitespace-nowrap">Units</th>
                                     <th className="px-6 py-4 text-right whitespace-nowrap">NAV</th>
+                                    <th className="px-6 py-4 text-right whitespace-nowrap">1D Change</th>
                                     <th className="px-6 py-4 text-right whitespace-nowrap">Current Value</th>
                                     <th className="px-6 py-4 text-right rounded-tr-xl whitespace-nowrap">Invested Value</th>
                                 </tr>
@@ -273,6 +291,9 @@ export default function DashboardPage() {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400 text-right font-mono">{h.units.toFixed(3)}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400 text-right font-mono">₹{h.current_nav.toFixed(2)}</td>
+                                        <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-mono ${h.nav_change_percent != null ? (h.nav_change_percent > 0 ? 'text-emerald-500' : (h.nav_change_percent < 0 ? 'text-rose-500' : 'text-slate-500')) : 'text-slate-400'}`}>
+                                            {h.nav_change_percent != null ? `${h.nav_change_percent > 0 ? '+' : ''}${h.nav_change_percent.toFixed(2)}%` : '-'}
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-indigo-700 dark:text-indigo-300 text-right font-semibold font-mono bg-indigo-50/50 dark:bg-indigo-500/[0.02]">₹{h.current_value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
                                             <span className="text-slate-700 dark:text-slate-300 font-mono">₹{h.invested_value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>

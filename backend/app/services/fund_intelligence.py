@@ -413,10 +413,10 @@ def parse_enrichment_response(
     other_alloc_final = raw_other_alloc
 
     if total_asset_alloc > 100.0:
-        if raw_equity_alloc is not None: equity_alloc_final = (raw_equity_alloc / total_asset_alloc) * 100.0
-        if raw_debt_alloc is not None: debt_alloc_final = (raw_debt_alloc / total_asset_alloc) * 100.0
-        if raw_cash_alloc is not None: cash_alloc_final = (raw_cash_alloc / total_asset_alloc) * 100.0
-        if raw_other_alloc is not None: other_alloc_final = (raw_other_alloc / total_asset_alloc) * 100.0
+        if raw_equity_alloc is not None: equity_alloc_final = round((raw_equity_alloc / total_asset_alloc) * 100.0, 2)
+        if raw_debt_alloc is not None: debt_alloc_final = round((raw_debt_alloc / total_asset_alloc) * 100.0, 2)
+        if raw_cash_alloc is not None: cash_alloc_final = round((raw_cash_alloc / total_asset_alloc) * 100.0, 2)
+        if raw_other_alloc is not None: other_alloc_final = round((raw_other_alloc / total_asset_alloc) * 100.0, 2)
 
     raw_large_cap_wt = _safe_float(data.get("large_cap_wt"))
     raw_mid_cap_wt = _safe_float(data.get("mid_cap_wt"))
@@ -431,10 +431,10 @@ def parse_enrichment_response(
     others_cap_wt_final = raw_others_cap_wt
 
     if total_cap_weight > 100.0:
-        if raw_large_cap_wt is not None: large_cap_wt_final = (raw_large_cap_wt / total_cap_weight) * 100.0
-        if raw_mid_cap_wt is not None: mid_cap_wt_final = (raw_mid_cap_wt / total_cap_weight) * 100.0
-        if raw_small_cap_wt is not None: small_cap_wt_final = (raw_small_cap_wt / total_cap_weight) * 100.0
-        if raw_others_cap_wt is not None: others_cap_wt_final = (raw_others_cap_wt / total_cap_weight) * 100.0
+        if raw_large_cap_wt is not None: large_cap_wt_final = round((raw_large_cap_wt / total_cap_weight) * 100.0, 2)
+        if raw_mid_cap_wt is not None: mid_cap_wt_final = round((raw_mid_cap_wt / total_cap_weight) * 100.0, 2)
+        if raw_small_cap_wt is not None: small_cap_wt_final = round((raw_small_cap_wt / total_cap_weight) * 100.0, 2)
+        if raw_others_cap_wt is not None: others_cap_wt_final = round((raw_others_cap_wt / total_cap_weight) * 100.0, 2)
 
     # 1. Base Enrichment Record — all flat fields from API
     enrichment = FundEnrichment(
@@ -742,7 +742,7 @@ def parse_enrichment_response(
         # Normalize if total exceeds 100%
         final_weight = raw_weight
         if raw_weight is not None and total_holding_weight > 100.0:
-            final_weight = (raw_weight / total_holding_weight) * 100.0
+            final_weight = round((raw_weight / total_holding_weight) * 100.0, 2)
 
         holdings_list.append(
             FundHolding(
@@ -775,7 +775,7 @@ def parse_enrichment_response(
         # Normalize if total exceeds 100%
         final_weight = raw_weight
         if raw_weight is not None and total_sector_weight > 100.0:
-            final_weight = (raw_weight / total_sector_weight) * 100.0
+            final_weight = round((raw_weight / total_sector_weight) * 100.0, 2)
 
         sectors_list.append(
             FundSector(
