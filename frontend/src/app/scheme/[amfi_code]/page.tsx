@@ -7,6 +7,8 @@ import { getSchemeDetails, getSchemeHistory } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { NAVChart } from '@/components/charts/NAVChart';
 import { EnrichmentView } from '@/components/scheme/EnrichmentView';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 interface NAVDataPoint {
     date: string;
@@ -81,6 +83,8 @@ export default function SchemeDetailsPage() {
     const [historyLoading, setHistoryLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [refreshTick, setRefreshTick] = useState(0);
+
+    const { sortConfig, handleSort, sortedItems } = useTableSort<TransactionRow>('date', 'desc');
 
     useEffect(() => {
         const userId = localStorage.getItem('mfa_user_id');
@@ -369,16 +373,16 @@ export default function SchemeDetailsPage() {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-950/50">
-                                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest rounded-tl-xl whitespace-nowrap">Date</th>
-                                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest whitespace-nowrap">Action</th>
-                                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-right whitespace-nowrap">Amount</th>
-                                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-right whitespace-nowrap">NAV</th>
-                                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest text-right whitespace-nowrap">Units</th>
-                                <th className="px-6 py-4 text-[10px] font-bold text-indigo-500 dark:text-indigo-300 uppercase tracking-widest text-right bg-indigo-50 dark:bg-indigo-500/5 rounded-tr-xl whitespace-nowrap border-l border-slate-200 dark:border-white/5">Balance</th>
+                                <SortableHeader<TransactionRow> label="Date" sortKey="date" sortConfig={sortConfig} onSort={handleSort} className="rounded-tl-xl" />
+                                <SortableHeader<TransactionRow> label="Action" sortKey="type" sortConfig={sortConfig} onSort={handleSort} />
+                                <SortableHeader<TransactionRow> label="Amount" sortKey="amount" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                                <SortableHeader<TransactionRow> label="NAV" sortKey="nav" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                                <SortableHeader<TransactionRow> label="Units" sortKey="units" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                                <SortableHeader<TransactionRow> label="Balance" sortKey="running_balance" sortConfig={sortConfig} onSort={handleSort} align="right" className="text-indigo-500 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/5 rounded-tr-xl border-l border-slate-200 dark:border-white/5" />
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                            {ledger.map((row) => {
+                            {sortedItems(ledger).map((row) => {
                                 const isOutflow = ['REDEMPTION', 'SWITCH_OUT', 'STP_OUT', 'SWP', 'STAMP_DUTY'].some(t => row.type.toUpperCase().includes(t));
                                 const isTax = row.is_tax === true;
 

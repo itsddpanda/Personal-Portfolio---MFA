@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { getDashboardSummary } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 interface Holding {
     scheme_name: string;
@@ -12,6 +14,8 @@ interface Holding {
     amfi_code?: string;
     invested_value: number;
     current_value: number;
+    gain: number;
+    gain_percent: number;
 }
 
 export default function TotalGainDrilldownPage() {
@@ -19,6 +23,8 @@ export default function TotalGainDrilldownPage() {
     const [totalGain, setTotalGain] = useState(0);
     const [loading, setLoading] = useState(true);
     const router = useRouter();
+
+    const { sortConfig, handleSort, sortedItems } = useTableSort<Holding>('gain', 'desc');
 
     useEffect(() => {
         const userId = localStorage.getItem('mfa_user_id');

@@ -26,10 +26,10 @@ function PinPageContent() {
     const handleSuccess = (id: string) => {
         if (mode === "verify") {
             localStorage.setItem("mfa_user_id", id);
-            router.push("/dashboard");
+            window.location.href = "/dashboard";
         } else {
             // After set or remove, just go back
-            router.push("/dashboard");
+            window.location.href = "/dashboard";
         }
     };
 

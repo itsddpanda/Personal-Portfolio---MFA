@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { getDashboardSummary } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 interface Holding {
     scheme_name: string;
@@ -20,6 +22,8 @@ export default function InvestedValueDrilldownPage() {
     const [totalInvested, setTotalInvested] = useState(0);
     const [loading, setLoading] = useState(true);
     const router = useRouter();
+
+    const { sortConfig, handleSort, sortedItems } = useTableSort<Holding>('invested_value', 'desc');
 
     useEffect(() => {
         const userId = localStorage.getItem('mfa_user_id');
@@ -94,14 +98,14 @@ export default function InvestedValueDrilldownPage() {
                         <table className="w-full divide-y divide-slate-100 dark:divide-white/5">
                             <thead className="bg-slate-50 dark:bg-slate-950/50">
                                 <tr>
-                                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Scheme</th>
-                                    <th className="px-6 py-4 text-center text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Estimation Status</th>
-                                    <th className="px-6 py-4 text-right text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Invested Value</th>
-                                    <th className="px-6 py-4 text-right text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">% Weight</th>
+                                    <SortableHeader<Holding> label="Scheme" sortKey="scheme_name" sortConfig={sortConfig} onSort={handleSort} />
+                                    <SortableHeader<Holding> label="Estimation Status" sortKey="is_estimated" sortConfig={sortConfig} onSort={handleSort} align="center" />
+                                    <SortableHeader<Holding> label="Invested Value" sortKey="invested_value" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                                    <SortableHeader<Holding> label="% Weight" sortKey="invested_value" sortConfig={sortConfig} onSort={handleSort} align="right" />
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                {holdings.map((h) => {
+                                {sortedItems(holdings).map((h) => {
                                     const weight = totalInvested > 0 ? (h.invested_value / totalInvested) * 100 : 0;
 
                                     return (

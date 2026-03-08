@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { getDashboardSummary } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 interface Holding {
     scheme_name: string;
@@ -21,6 +23,8 @@ export default function CurrentValueDrilldownPage() {
     const [loading, setLoading] = useState(true);
     const router = useRouter();
 
+    const { sortConfig, handleSort, sortedItems } = useTableSort<Holding>('current_value', 'desc');
+
     useEffect(() => {
         const userId = localStorage.getItem('mfa_user_id');
         if (!userId) {
@@ -35,9 +39,6 @@ export default function CurrentValueDrilldownPage() {
 
                 // Only show schemes that actually have balance/value
                 const activeHoldings = result.holdings.filter((h: any) => h.current_value > 0);
-
-                // Sort by value descending
-                activeHoldings.sort((a: Holding, b: Holding) => b.current_value - a.current_value);
 
                 setHoldings(activeHoldings);
                 setTotalValue(result.total_value);
@@ -97,17 +98,17 @@ export default function CurrentValueDrilldownPage() {
                         <table className="w-full divide-y divide-slate-100 dark:divide-white/5">
                             <thead className="bg-slate-50 dark:bg-slate-950/50">
                                 <tr>
-                                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest leading-none">Scheme</th>
-                                    <th className="px-6 py-4 text-right text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest leading-none">Active Units</th>
+                                    <SortableHeader<Holding> label="Scheme" sortKey="scheme_name" sortConfig={sortConfig} onSort={handleSort} className="leading-none" />
+                                    <SortableHeader<Holding> label="Active Units" sortKey="units" sortConfig={sortConfig} onSort={handleSort} align="right" className="leading-none" />
                                     <th className="px-2 py-4 text-center text-[10px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest leading-none"></th>
-                                    <th className="px-6 py-4 text-right text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest leading-none">Latest NAV</th>
+                                    <SortableHeader<Holding> label="Latest NAV" sortKey="current_nav" sortConfig={sortConfig} onSort={handleSort} align="right" className="leading-none" />
                                     <th className="px-2 py-4 text-center text-[10px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest leading-none"></th>
-                                    <th className="px-6 py-4 text-right text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest leading-none bg-indigo-50 dark:bg-indigo-500/5 border-l border-slate-200 dark:border-white/5 rounded-tl-xl ml-2">Current Value</th>
-                                    <th className="px-6 py-4 text-right text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest leading-none bg-indigo-50 dark:bg-indigo-500/5">Weight</th>
+                                    <SortableHeader<Holding> label="Current Value" sortKey="current_value" sortConfig={sortConfig} onSort={handleSort} align="right" className="text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/5 border-l border-slate-200 dark:border-white/5 rounded-tl-xl ml-2 leading-none" />
+                                    <SortableHeader<Holding> label="Weight" sortKey="current_value" sortConfig={sortConfig} onSort={handleSort} align="right" className="bg-indigo-50 dark:bg-indigo-500/5 leading-none" />
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                {holdings.map((h) => {
+                                {sortedItems(holdings).map((h) => {
                                     const weight = totalValue > 0 ? (h.current_value / totalValue) * 100 : 0;
 
                                     return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Lock, Unlock, User, ArrowLeft, RefreshCw, ShieldCheck } from "lucide-react";
 
 interface PinFormProps {
@@ -11,9 +11,17 @@ interface PinFormProps {
 }
 
 export default function PinForm({ mode, user, onSuccess, onCancel }: PinFormProps) {
-    const [pin, setPin] = useState("");
+    const [digits, setDigits] = useState<string[]>(["", "", "", ""]);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const inputRefs = [
+        useRef<HTMLInputElement>(null),
+        useRef<HTMLInputElement>(null),
+        useRef<HTMLInputElement>(null),
+        useRef<HTMLInputElement>(null)
+    ];
+
+    const pin = digits.join("");
 
     const API_BASE = "/api";
 
@@ -88,21 +96,54 @@ export default function PinForm({ mode, user, onSuccess, onCancel }: PinFormProp
             </p>
 
             <div className="space-y-6">
-                <input
-                    type="password"
-                    inputMode="numeric"
-                    className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-white/5 rounded-2xl px-6 py-5 text-center tracking-[1.5em] text-3xl font-black focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-900 dark:text-slate-100 transition-all placeholder:text-slate-200 dark:placeholder:text-slate-800"
-                    maxLength={4}
-                    value={pin}
-                    onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, '').slice(0, 4);
-                        setPin(val);
-                        if (val.length === 4) setError("");
-                    }}
-                    onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-                    autoFocus
-                    placeholder="0000"
-                />
+                <div className="flex justify-center gap-3">
+                    {digits.map((digit, idx) => (
+                        <input
+                            key={idx}
+                            ref={inputRefs[idx]}
+                            type="password"
+                            inputMode="numeric"
+                            className="w-14 h-16 bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-white/5 rounded-2xl text-center text-3xl font-black focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-900 dark:text-slate-100 transition-all placeholder:text-slate-200 dark:placeholder:text-slate-800"
+                            maxLength={1}
+                            value={digit}
+                            onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, '').slice(-1);
+                                if (!val && e.target.value !== "") return; // Ignore non-numeric
+
+                                const newDigits = [...digits];
+                                newDigits[idx] = val;
+                                setDigits(newDigits);
+
+                                if (val && idx < 3) {
+                                    inputRefs[idx + 1].current?.focus();
+                                }
+                                if (newDigits.every(d => d !== "")) setError("");
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === "Backspace" && !digits[idx] && idx > 0) {
+                                    inputRefs[idx - 1].current?.focus();
+                                } else if (e.key === "Enter" && digits.every(d => d !== "")) {
+                                    handleSubmit();
+                                }
+                            }}
+                            onPaste={(e) => {
+                                e.preventDefault();
+                                const pastedData = e.clipboardData.getData("text").replace(/\D/g, '').slice(0, 4);
+                                if (pastedData) {
+                                    const newDigits = [...digits];
+                                    pastedData.split("").forEach((char, i) => {
+                                        if (i < 4) newDigits[i] = char;
+                                    });
+                                    setDigits(newDigits);
+                                    // Focus last filled or next empty
+                                    const nextIdx = Math.min(pastedData.length, 3);
+                                    inputRefs[nextIdx].current?.focus();
+                                }
+                            }}
+                            autoFocus={idx === 0}
+                        />
+                    ))}
+                </div>
 
                 {error && (
                     <p className="text-rose-500 dark:text-rose-400 text-sm font-bold animate-in shake-in duration-300">
@@ -115,8 +156,8 @@ export default function PinForm({ mode, user, onSuccess, onCancel }: PinFormProp
                         onClick={handleSubmit}
                         disabled={loading || pin.length !== 4}
                         className={`w-full py-4 rounded-2xl font-bold transition-all shadow-xl text-base flex items-center justify-center disabled:opacity-50 ${mode === 'remove'
-                                ? 'bg-rose-500 hover:bg-rose-600 text-white shadow-rose-500/20'
-                                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20'
+                            ? 'bg-rose-500 hover:bg-rose-600 text-white shadow-rose-500/20'
+                            : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20'
                             }`}
                     >
                         {loading ? <RefreshCw className="animate-spin mr-2" size={20} /> : null}

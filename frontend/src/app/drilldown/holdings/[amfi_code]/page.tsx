@@ -6,7 +6,9 @@ import Link from 'next/link';
 import { getSchemeEnrichment } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { ArrowUp, ArrowDown, ArrowUpDown, Search } from 'lucide-react';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
+import { Search } from 'lucide-react';
 
 interface HoldingHistoryPoint {
     per: string;
@@ -37,7 +39,8 @@ export default function HoldingsDrilldownPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({ key: 'weighting', direction: 'desc' });
+
+    const { sortConfig, handleSort, sortedItems } = useTableSort<Holding>('weighting', 'desc');
 
     useEffect(() => {
         if (!amfiCode) return;
@@ -104,37 +107,9 @@ export default function HoldingsDrilldownPage() {
         fetchData();
     }, [amfiCode]);
 
-    const handleSort = (key: SortKey) => {
-        let direction: 'asc' | 'desc' = 'desc';
-        if (sortConfig.key === key && sortConfig.direction === 'desc') {
-            direction = 'asc';
-        }
-        setSortConfig({ key, direction });
-    };
-
-    const getSortIcon = (key: SortKey) => {
-        if (sortConfig.key !== key) return <ArrowUpDown className="w-3 h-3 text-slate-300 dark:text-slate-600 ml-1 inline" />;
-        return sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-500 ml-1 inline" /> : <ArrowDown className="w-3 h-3 text-indigo-500 ml-1 inline" />;
-    };
-
     const sortedAndFilteredHoldings = React.useMemo(() => {
-        let filtered = holdings.filter(h => h.stock_name?.toLowerCase().includes(searchTerm.toLowerCase()) || h.sector?.toLowerCase().includes(searchTerm.toLowerCase()));
-
-        filtered.sort((a, b) => {
-            const valA = a[sortConfig.key] ?? (typeof a[sortConfig.key] === 'string' ? '' : -Infinity);
-            const valB = b[sortConfig.key] ?? (typeof b[sortConfig.key] === 'string' ? '' : -Infinity);
-
-            if (valA < valB) {
-                return sortConfig.direction === 'asc' ? -1 : 1;
-            }
-            if (valA > valB) {
-                return sortConfig.direction === 'asc' ? 1 : -1;
-            }
-            return 0;
-        });
-
-        return filtered;
-    }, [holdings, sortConfig, searchTerm]);
+        return holdings.filter(h => h.stock_name?.toLowerCase().includes(searchTerm.toLowerCase()) || h.sector?.toLowerCase().includes(searchTerm.toLowerCase()));
+    }, [holdings, searchTerm]);
 
     // Helper to draw a tiny sparkline
     const renderSparkline = (history: HoldingHistoryPoint[] | undefined) => {
@@ -245,31 +220,19 @@ export default function HoldingsDrilldownPage() {
                         <table className="w-full text-left text-sm whitespace-nowrap">
                             <thead className="bg-slate-50 dark:bg-slate-950 sticky top-0 z-10 shadow-sm">
                                 <tr>
-                                    <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors select-none group" onClick={() => handleSort('stock_name')}>
-                                        Instrument Name {getSortIcon('stock_name')}
-                                    </th>
-                                    <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors select-none group" onClick={() => handleSort('sector')}>
-                                        Sector {getSortIcon('sector')}
-                                    </th>
-                                    <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors select-none text-right group" onClick={() => handleSort('weighting')}>
-                                        Weight % {getSortIcon('weighting')}
-                                    </th>
-                                    <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors select-none text-right group hidden lg:table-cell" onClick={() => handleSort('market_value')}>
-                                        Market Value (₹ Cr) {getSortIcon('market_value')}
-                                    </th>
-                                    <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors select-none text-right group border-l border-slate-200 dark:border-white/5" onClick={() => handleSort('change_1m')}>
-                                        1M Change {getSortIcon('change_1m')}
-                                    </th>
-                                    {holdings.some(h => h.change_2m != null) && (
-                                        <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors select-none text-right group hidden sm:table-cell" onClick={() => handleSort('change_2m')}>
-                                            2M Change {getSortIcon('change_2m')}
-                                        </th>
-                                    )}
-                                    {holdings.some(h => h.change_3m != null) && (
-                                        <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors select-none text-right group hidden sm:table-cell" onClick={() => handleSort('change_3m')}>
-                                            3M Change {getSortIcon('change_3m')}
-                                        </th>
-                                    )}
+                                    <tr>
+                                        <SortableHeader<Holding> label="Instrument Name" sortKey="stock_name" sortConfig={sortConfig} onSort={handleSort} />
+                                        <SortableHeader<Holding> label="Sector" sortKey="sector" sortConfig={sortConfig} onSort={handleSort} />
+                                        <SortableHeader<Holding> label="Weight %" sortKey="weighting" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                                        <SortableHeader<Holding> label="Market Value (₹ Cr)" sortKey="market_value" sortConfig={sortConfig} onSort={handleSort} align="right" className="hidden lg:table-cell" />
+                                        <SortableHeader<Holding> label="1M Change" sortKey="change_1m" sortConfig={sortConfig} onSort={handleSort} align="right" className="border-l border-slate-200 dark:border-white/5" />
+                                        {holdings.some(h => h.change_2m != null) && (
+                                            <SortableHeader<Holding> label="2M Change" sortKey="change_2m" sortConfig={sortConfig} onSort={handleSort} align="right" className="hidden sm:table-cell" />
+                                        )}
+                                        {holdings.some(h => h.change_3m != null) && (
+                                            <SortableHeader<Holding> label="3M Change" sortKey="change_3m" sortConfig={sortConfig} onSort={handleSort} align="right" className="hidden sm:table-cell" />
+                                        )}
+                                    </tr>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
