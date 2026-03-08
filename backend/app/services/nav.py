@@ -172,13 +172,17 @@ def find_schemes_with_nav_gaps(session: Session, lookback_days: int = 7, min_exp
     Returns: list of (scheme_id, amfi_code, actual_count) tuples.
     """
     today = date.today()
-    cutoff = today - timedelta(days=lookback_days)
-
+    yesterday = today - timedelta(days=1)
+    cutoff = yesterday - timedelta(days=lookback_days)
 
     results = session.exec(
         select(Scheme.id, Scheme.amfi_code, func.count(NavHistory.id))
         .join(NavHistory, NavHistory.scheme_id == Scheme.id)
-        .where(Scheme.amfi_code != None, NavHistory.date >= cutoff)
+        .where(
+            Scheme.amfi_code != None, 
+            NavHistory.date >= cutoff,
+            NavHistory.date <= yesterday
+        )
         .group_by(Scheme.id, Scheme.amfi_code)
     ).all()
 
