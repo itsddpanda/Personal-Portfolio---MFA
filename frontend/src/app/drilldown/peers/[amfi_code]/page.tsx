@@ -5,7 +5,9 @@ import { useRouter, useParams } from 'next/navigation';
 import { getSchemeEnrichment } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { ArrowUp, ArrowDown, ArrowUpDown, Search } from 'lucide-react';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
+import { Search } from 'lucide-react';
 
 interface Peer {
     fund_name: string;
@@ -35,7 +37,8 @@ export default function PeersDrilldownPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({ key: 'cagr_1y', direction: 'desc' });
+
+    const { sortConfig, handleSort, sortedItems } = useTableSort<Peer>('cagr_1y', 'desc');
 
     useEffect(() => {
         if (!amfiCode) return;
@@ -59,33 +62,9 @@ export default function PeersDrilldownPage() {
         fetchData();
     }, [amfiCode]);
 
-    const handleSort = (key: SortKey) => {
-        let direction: 'asc' | 'desc' = 'desc';
-        if (sortConfig.key === key && sortConfig.direction === 'desc') {
-            direction = 'asc';
-        }
-        setSortConfig({ key, direction });
-    };
-
-    const getSortIcon = (key: SortKey) => {
-        if (sortConfig.key !== key) return <ArrowUpDown className="w-3 h-3 text-slate-300 dark:text-slate-600 ml-1 inline" />;
-        return sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3 text-indigo-500 ml-1 inline" /> : <ArrowDown className="w-3 h-3 text-indigo-500 ml-1 inline" />;
-    };
-
     const sortedAndFilteredPeers = React.useMemo(() => {
-        let filtered = peers.filter(p => p.fund_name?.toLowerCase().includes(searchTerm.toLowerCase()));
-
-        filtered.sort((a, b) => {
-            const valA = a[sortConfig.key] ?? -Infinity;
-            const valB = b[sortConfig.key] ?? -Infinity;
-
-            if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-            if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
-            return 0;
-        });
-
-        return filtered;
-    }, [peers, sortConfig, searchTerm]);
+        return peers.filter(p => p.fund_name?.toLowerCase().includes(searchTerm.toLowerCase()));
+    }, [peers, searchTerm]);
 
     const hasDebt = peers.some(p => p.yield_to_maturity != null || p.modified_duration != null);
     const hasTurnover = peers.some(p => p.portfolio_turnover != null);
@@ -142,45 +121,25 @@ export default function PeersDrilldownPage() {
                         <table className="w-full text-left text-sm whitespace-nowrap">
                             <thead className="bg-slate-50 dark:bg-slate-950 sticky top-0 z-10 shadow-sm">
                                 <tr>
-                                    <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 select-none bg-inherit" onClick={() => handleSort('fund_name')}>
-                                        Fund Name {getSortIcon('fund_name')}
-                                    </th>
-                                    <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 select-none text-right bg-inherit border-l border-slate-200 dark:border-white/5" onClick={() => handleSort('cagr_1y')}>
-                                        1Y Ret {getSortIcon('cagr_1y')}
-                                    </th>
-                                    <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 select-none text-right bg-inherit" onClick={() => handleSort('cagr_3y')}>
-                                        3Y Ret {getSortIcon('cagr_3y')}
-                                    </th>
-                                    <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 select-none text-right bg-inherit" onClick={() => handleSort('cagr_5y')}>
-                                        5Y Ret {getSortIcon('cagr_5y')}
-                                    </th>
-                                    <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 select-none text-right bg-inherit" onClick={() => handleSort('cagr_10y')}>
-                                        10Y Ret {getSortIcon('cagr_10y')}
-                                    </th>
-                                    <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 select-none text-right bg-inherit border-l border-slate-200 dark:border-white/5" onClick={() => handleSort('expense_ratio')}>
-                                        Exp Ratio {getSortIcon('expense_ratio')}
-                                    </th>
-                                    <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 select-none text-right bg-inherit" onClick={() => handleSort('std_deviation')}>
-                                        Volatility {getSortIcon('std_deviation')}
-                                    </th>
-                                    {hasTurnover && (
-                                        <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 select-none text-right bg-inherit" onClick={() => handleSort('portfolio_turnover')}>
-                                            Turnover {getSortIcon('portfolio_turnover')}
-                                        </th>
-                                    )}
-                                    {hasDebt && (
-                                        <>
-                                            <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 select-none text-right bg-inherit border-l border-slate-200 dark:border-white/5" onClick={() => handleSort('yield_to_maturity')}>
-                                                YTM {getSortIcon('yield_to_maturity')}
-                                            </th>
-                                            <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 select-none text-right bg-inherit" onClick={() => handleSort('modified_duration')}>
-                                                Duration {getSortIcon('modified_duration')}
-                                            </th>
-                                            <th className="px-4 py-3 font-medium text-slate-500 dark:text-slate-400 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 select-none text-right bg-inherit" onClick={() => handleSort('avg_eff_maturity')}>
-                                                Avg Maturity {getSortIcon('avg_eff_maturity')}
-                                            </th>
-                                        </>
-                                    )}
+                                    <tr>
+                                        <SortableHeader<Peer> label="Fund Name" sortKey="fund_name" sortConfig={sortConfig} onSort={handleSort} />
+                                        <SortableHeader<Peer> label="1Y Ret" sortKey="cagr_1y" sortConfig={sortConfig} onSort={handleSort} align="right" className="border-l border-slate-200 dark:border-white/5" />
+                                        <SortableHeader<Peer> label="3Y Ret" sortKey="cagr_3y" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                                        <SortableHeader<Peer> label="5Y Ret" sortKey="cagr_5y" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                                        <SortableHeader<Peer> label="10Y Ret" sortKey="cagr_10y" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                                        <SortableHeader<Peer> label="Exp Ratio" sortKey="expense_ratio" sortConfig={sortConfig} onSort={handleSort} align="right" className="border-l border-slate-200 dark:border-white/5" />
+                                        <SortableHeader<Peer> label="Volatility" sortKey="std_deviation" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                                        {hasTurnover && (
+                                            <SortableHeader<Peer> label="Turnover" sortKey="portfolio_turnover" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                                        )}
+                                        {hasDebt && (
+                                            <>
+                                                <SortableHeader<Peer> label="YTM" sortKey="yield_to_maturity" sortConfig={sortConfig} onSort={handleSort} align="right" className="border-l border-slate-200 dark:border-white/5" />
+                                                <SortableHeader<Peer> label="Duration" sortKey="modified_duration" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                                                <SortableHeader<Peer> label="Avg Maturity" sortKey="avg_eff_maturity" sortConfig={sortConfig} onSort={handleSort} align="right" />
+                                            </>
+                                        )}
+                                    </tr>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-white/5">

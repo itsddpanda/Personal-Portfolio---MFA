@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { getDashboardSummary } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 interface Holding {
     scheme_name: string;
@@ -30,6 +32,8 @@ export default function XirrDrilldownPage() {
         return false;
     });
     const router = useRouter();
+
+    const { sortConfig, handleSort, sortedItems } = useTableSort<Holding>('xirr', 'desc');
 
     const toggleRedeemed = () => {
         const next = !showRedeemed;
@@ -94,8 +98,8 @@ export default function XirrDrilldownPage() {
                         <button
                             onClick={toggleRedeemed}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all duration-200 ${showRedeemed
-                                    ? 'bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/30 shadow-sm'
-                                    : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:border-indigo-200 dark:hover:border-indigo-500/20 hover:text-indigo-600 dark:hover:text-indigo-400'
+                                ? 'bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/30 shadow-sm'
+                                : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:border-indigo-200 dark:hover:border-indigo-500/20 hover:text-indigo-600 dark:hover:text-indigo-400'
                                 }`}
                             title={showRedeemed ? 'Hide fully exited holdings' : 'Show fully exited holdings'}
                         >
@@ -103,8 +107,8 @@ export default function XirrDrilldownPage() {
                             Show Exited
                             {redeemedCount > 0 && (
                                 <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${showRedeemed
-                                        ? 'bg-indigo-200/60 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
-                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                                    ? 'bg-indigo-200/60 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
+                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
                                     }`}>
                                     {redeemedCount}
                                 </span>
@@ -150,14 +154,14 @@ export default function XirrDrilldownPage() {
                         <table className="w-full divide-y divide-slate-100 dark:divide-white/5">
                             <thead className="bg-slate-50 dark:bg-slate-950/50">
                                 <tr>
-                                    <th className="px-6 py-4 text-left text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest leading-none">Scheme</th>
-                                    <th className="px-6 py-4 text-right text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest leading-none">Invested Value</th>
+                                    <SortableHeader<Holding> label="Scheme" sortKey="scheme_name" sortConfig={sortConfig} onSort={handleSort} className="leading-none" />
+                                    <SortableHeader<Holding> label="Invested Value" sortKey="invested_value" sortConfig={sortConfig} onSort={handleSort} align="right" className="leading-none" />
                                     <th className="px-2 py-4 text-center text-[10px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest leading-none"></th>
-                                    <th className="px-6 py-4 text-right text-[10px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-widest leading-none bg-violet-50 dark:bg-violet-500/5 border-l border-slate-200 dark:border-white/5">Per-Scheme XIRR</th>
+                                    <SortableHeader<Holding> label="Per-Scheme XIRR" sortKey="xirr" sortConfig={sortConfig} onSort={handleSort} align="right" className="text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/5 border-l border-slate-200 dark:border-white/5 leading-none" />
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                {holdings.map((h) => {
+                                {sortedItems(holdings).map((h) => {
                                     const gain = h.current_value - h.invested_value;
                                     const gainPercent = h.invested_value > 0 ? (gain / h.invested_value) * 100 : 0;
                                     const isPositive = gain >= 0;

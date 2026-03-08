@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import ProcessingOverlay from '@/components/ProcessingOverlay';
 import { APP_VERSION } from '@/lib/config';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 
 interface Holding {
     scheme_name: string;
@@ -56,6 +58,8 @@ export default function DashboardPage() {
     });
     const router = useRouter();
     const toast = useToast();
+
+    const { sortConfig, handleSort, sortedItems } = useTableSort<Holding>('current_value', 'desc');
 
     const toggleRedeemed = () => {
         const next = !showRedeemed;
@@ -203,7 +207,7 @@ export default function DashboardPage() {
                         ) : (
                             <div className={`text-sm font-medium px-3 py-1.5 rounded-full border bg-slate-50 dark:bg-slate-950/50 ${isStale ? 'text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-500/20' : 'text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/5'}`}>
                                 {navSyncFailed && <span className="text-red-500 dark:text-red-400 mr-2" title="Background sync failed">⚠️</span>}
-                                {latest_nav_date ? `Latest NAV Date: ${new Date(latest_nav_date).toLocaleDateString()}` : "Latest NAV Date: Pending"}
+                                {latest_nav_date ? `Latest NAV Date: ${new Date(latest_nav_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : "Latest NAV Date: Pending"}
                             </div>
                         )}
                         <Button variant="outline" onClick={handleForceSync} disabled={syncing}>
@@ -215,8 +219,8 @@ export default function DashboardPage() {
                         <button
                             onClick={toggleRedeemed}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all duration-200 ${showRedeemed
-                                    ? 'bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/30 shadow-sm'
-                                    : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:border-indigo-200 dark:hover:border-indigo-500/20 hover:text-indigo-600 dark:hover:text-indigo-400'
+                                ? 'bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/30 shadow-sm'
+                                : 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:border-indigo-200 dark:hover:border-indigo-500/20 hover:text-indigo-600 dark:hover:text-indigo-400'
                                 }`}
                             title={showRedeemed ? 'Hide fully exited holdings' : 'Show fully exited holdings'}
                         >
@@ -224,8 +228,8 @@ export default function DashboardPage() {
                             Show Exited
                             {(data.redeemed_count > 0) && (
                                 <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${showRedeemed
-                                        ? 'bg-indigo-200/60 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
-                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                                    ? 'bg-indigo-200/60 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
+                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
                                     }`}>
                                     {data.redeemed_count}
                                 </span>
@@ -306,16 +310,16 @@ export default function DashboardPage() {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-950/50 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                    <th className="px-6 py-4 rounded-tl-xl whitespace-nowrap">Scheme</th>
-                                    <th className="px-6 py-4 text-right whitespace-nowrap">Units</th>
-                                    <th className="px-6 py-4 text-right whitespace-nowrap">NAV</th>
-                                    <th className="px-6 py-4 text-right whitespace-nowrap">1D Change</th>
-                                    <th className="px-6 py-4 text-right whitespace-nowrap">Current Value</th>
-                                    <th className="px-6 py-4 text-right rounded-tr-xl whitespace-nowrap">Invested Value</th>
+                                    <SortableHeader<Holding> label="Scheme" sortKey="scheme_name" sortConfig={sortConfig} onSort={handleSort} className="rounded-tl-xl whitespace-nowrap" />
+                                    <SortableHeader<Holding> label="Units" sortKey="units" sortConfig={sortConfig} onSort={handleSort} align="right" className="whitespace-nowrap" />
+                                    <SortableHeader<Holding> label="NAV" sortKey="current_nav" sortConfig={sortConfig} onSort={handleSort} align="right" className="whitespace-nowrap" />
+                                    <SortableHeader<Holding> label="1D Change" sortKey="nav_change_percent" sortConfig={sortConfig} onSort={handleSort} align="right" className="whitespace-nowrap" />
+                                    <SortableHeader<Holding> label="Current Value" sortKey="current_value" sortConfig={sortConfig} onSort={handleSort} align="right" className="whitespace-nowrap" />
+                                    <SortableHeader<Holding> label="Invested Value" sortKey="invested_value" sortConfig={sortConfig} onSort={handleSort} align="right" className="rounded-tr-xl whitespace-nowrap" />
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                                {holdings.map((h) => (
+                                {sortedItems(holdings).map((h) => (
                                     <tr key={h.isin} className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group ${h.is_redeemed ? 'opacity-55' : ''}`}>
                                         <td className="px-6 py-4 text-sm font-medium">
                                             <div className="flex items-center gap-2">
