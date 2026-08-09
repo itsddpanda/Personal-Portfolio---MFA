@@ -49,3 +49,4 @@ mfa.db
 *.py
 .*/
 vex*
+docs/
