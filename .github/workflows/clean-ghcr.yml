@@ -11,6 +11,10 @@ on:
         required: true
         default: '3'
 
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
+
+
 jobs:
   clean-ghcr:
     runs-on: ubuntu-latest
